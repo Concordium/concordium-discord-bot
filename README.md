@@ -1,70 +1,70 @@
 # 🤖 Concordium Discord Verification Bot
 
-This project is a Discord bot built for the Concordium ecosystem to securely verify community members as **Validators**, **Delegators**, or **Developers**, and assign them appropriate roles within a Discord server.
+A Discord bot for the Concordium ecosystem, providing **on-chain verification** and role management for server members: **Validators**, **Delegators**, and **Developers**.  
+Supports automatic cleanup of inactive validators and delegators using on-chain activity checks.
 
 ---
 
-## 🚀 Features
+## 🚀 Key Features
 
-- ✅ **Multi-step verification flows** for:
-  - Delegators (on-chain delegation + transaction check)
-  - Validators (stake verification)
-  - Developers (GitHub OAuth, repo analysis, Discord role assignment)
-- 📡 **OAuth2 GitHub integration** with redirect and state tracking
-- 🧠 **Smart role assignment** after verifying wallet or GitHub account
-- 🗃 **PostgreSQL-backed verification log** to prevent duplicates and track history
-- 🔐 **Secure backend** using `concordium-client` and controlled through slash commands
-- 💬 **Private threads** are created per-user for isolated verification
+- **Multi-step verification flows**:
+  - **Delegator:** On-chain delegation check.
+  - **Validator:** On-chain validation check.
+  - **Developer:** OAuth2 via GitHub, repository analysis, and role assignment.
+- **Smart role assignment** after wallet or GitHub account verification.
+- **Verification history in PostgreSQL** — prevents duplicates and enables auditing.
+- **Private threads** for each user during verification.
+- **AutoModeration integration** for increased security.
+- **Secure backend:** Uses `concordium-client` and centralized management through slash commands.
+- **Fully Dockerized deployment**.
+- **Cleanup of inactive** validators and delegators via on-chain logic.
 
 ---
 
 ## 🛠 Requirements
 
-- Node.js 18+
-- Docker & Docker Compose (for containerized deployment)
-- PostgreSQL
-- `concordium-client` binary installed (inside container)
+- **Docker** & **Docker Compose**
+- **PostgreSQL**
+- `concordium-client` (installed in the container)
 
 ---
 
-## 📁 Folder Structure
+## 📁 Project Structure
 
 ```
-.
-├── bot.js                   # Discord bot core logic
-├── server.js                # Express server (GitHub OAuth + state handling)
+├── bot.js # Discord bot core logic
+├── server.js # Express server (GitHub OAuth + state handling)
 ├── Dockerfile
 ├── docker-compose.yml
-├── .env.template            # Example environment file
-├── init.sql                 # SQL to initialize verifications table
+├── .env.template # Example environment file
+├── init.sql # SQL for verification table initialization
+├── automodIntegration.js # Discord AutoModeration integration
+├── delegators-cleanup.js # Inactive delegator cleanup
+├── validators-cleanup.js # Inactive validator cleanup
 ├── roles/
-│   ├── delegatorVerification.js
-│   ├── devVerification.js
-│   └── validatorVerification.js
-└── utils/
-    └── automodIntegration.js
+│ ├── delegatorVerification.js # Delegator verification
+│ ├── devVerification.js # Developer verification
+│ └── validatorVerification.js # Validator verification
 ```
 
 ---
 
 ## ⚙️ Environment Configuration (`.env`)
 
-Use `.env.template` as a starting point and rename it to `.env`.
+Use `.env.template` as a starting point and rename it to `.env`.  
+Make sure to fill in all required fields (Discord token, GitHub OAuth, database credentials, etc.).
 
 ```
-# 🔧 Server and Github OAuth Configuration
-
-SERVER_URL=https://yourdomain.com
-REDIRECT_URI=https://yourdomain.com/callback
+# Discord & GitHub OAuth
+SERVER_URL=
+REDIRECT_URI=
 CLIENT_ID=
 CLIENT_SECRET=
 
 # concordium-client
+CONCORDIUM_CLIENT_PATH=\usr\bin\concordium-client
 
-CONCORDIUM_CLIENT_PATH=/usr/bin/concordium-client
-
-# 🤖 Discord Bot Configuration
-
+# Discord Bot
 DISCORD_BOT_TOKEN=
 DISCORD_GUILD_ID=
 
@@ -80,49 +80,39 @@ CLAIM_CHANNEL_ID=
 # AutoModeration
 AUTOMOD_RULE_ID=
 
-# 🗄️ PostgreSQL Database Configuration
-
+# PostgreSQL
 PG_USER=
 PG_HOST=
 PG_DATABASE=
 PG_PASSWORD=
 PG_PORT=
 ```
-⚠️ Never commit your .env file. Use .env.template for sharing.
 
+🐳 Docker Deployment
 
-## 🧾 Slash Commands
+Check and fill your .env file as described above.
+Build and run the containers:
 
-The bot automatically registers:
-```
-/start-again-delegator
-
-/start-again-validator
-```
-These allow users to restart verification if needed.
-
-## 🐳 Docker Deployment
-
-To build and run:
 ```
 docker compose build
 docker compose up -d
 ```
 
-To connect to the PostgreSQL database:
-```
-docker exec -it postgres-db psql -U botuser -d concordium_verification
-```
+View logs:
 
-## 🌐 nginx Configuration (Required for GitHub OAuth)
+docker compose logs -f
 
-To properly handle GitHub OAuth redirects, your domain must expose the following paths:
+🌐 Proxy & Security (nginx)
+
+GitHub OAuth requires a reverse proxy with HTTPS support.
+See example configuration below (replace yourdomain.com with your real domain):
+
 ```
 server {
     server_name yourdomain.com;
 
     location /save-state {
-        proxy_pass http://172.20.0.3:3000; # Or use internal Docker IP
+        proxy_pass http://concordium-bot:3000;
         proxy_http_version 1.1;
         proxy_set_header Upgrade $http_upgrade;
         proxy_set_header Connection 'upgrade';
@@ -131,7 +121,7 @@ server {
     }
 
     location /callback {
-        proxy_pass http://172.20.0.3:3000;
+        proxy_pass http://concordium-bot:3000;
         proxy_http_version 1.1;
         proxy_set_header Upgrade $http_upgrade;
         proxy_set_header Connection 'upgrade';
@@ -153,10 +143,28 @@ server {
 }
 ```
 
-📌 Replace yourdomain.com with your actual domain.
+Note:
+GitHub OAuth and Discord API require HTTPS!
 
-⚠️ HTTPS is mandatory for GitHub OAuth and Discord API to work properly.
+🧾 Slash Commands
+```
+/start-again-delegator — Restart delegator verification
+/start-again-validator — Restart validator verification
+/cleanup-inactive-validators — Remove validator roles from inactive users (on-chain check)
+/cleanup-inactive-delegators — Remove delegator roles from inactive users (on-chain check)
+```
+🗄️ Database Schema
 
-## 📞 Support & Contributions
+Table verifications (see init.sql):
+Field	Type	Description
+id	SERIAL	Primary key
+tx_hash	TEXT	Transaction hash
+wallet_address	TEXT	Concordium wallet address
+discord_id	TEXT	User’s Discord ID
+role_type	TEXT	Validator, Delegator, Developer
+verified_at	TIMESTAMP	Verification timestamp
+github_profile	TEXT	GitHub profile (for developer flow)
+📞 Support & Contributions
 
-Pull requests are welcome. For major changes, please open an issue first to discuss what you would like to change.
+Pull requests are welcome!
+For major changes, please open an issue first to discuss your proposal.
