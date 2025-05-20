@@ -38,10 +38,11 @@ Supports automatic cleanup of inactive validators and delegators using on-chain 
 ├── docker-compose.yml
 ├── .env.template # Example environment file
 ├── init.sql # SQL for verification table initialization
-├── automodIntegration.js # Discord AutoModeration integration
-├── delegators-cleanup.js # Inactive delegator cleanup
-├── validators-cleanup.js # Inactive validator cleanup
+├── utils/
+│ ├── automodIntegration.js # Discord AutoModeration integration
 ├── roles/
+│ ├── delegators-cleanup.js # Inactive delegator cleanup
+│ ├── validators-cleanup.js # Inactive validator cleanup
 │ ├── delegatorVerification.js # Delegator verification
 │ ├── devVerification.js # Developer verification
 │ └── validatorVerification.js # Validator verification
@@ -88,7 +89,7 @@ PG_PASSWORD=
 PG_PORT=
 ```
 
-🐳 Docker Deployment
+## 🐳 Docker Deployment
 
 Check and fill your .env file as described above.
 Build and run the containers:
@@ -99,10 +100,11 @@ docker compose up -d
 ```
 
 View logs:
-
+```
 docker compose logs -f
+```
 
-🌐 Proxy & Security (nginx)
+## 🌐 Proxy & Security (nginx)
 
 GitHub OAuth requires a reverse proxy with HTTPS support.
 See example configuration below (replace yourdomain.com with your real domain):
@@ -112,7 +114,7 @@ server {
     server_name yourdomain.com;
 
     location /save-state {
-        proxy_pass http://concordium-bot:3000;
+        proxy_pass http://docker-container-ip-address:3000;
         proxy_http_version 1.1;
         proxy_set_header Upgrade $http_upgrade;
         proxy_set_header Connection 'upgrade';
@@ -121,7 +123,7 @@ server {
     }
 
     location /callback {
-        proxy_pass http://concordium-bot:3000;
+        proxy_pass http://docker-container-ip-address:3000;
         proxy_http_version 1.1;
         proxy_set_header Upgrade $http_upgrade;
         proxy_set_header Connection 'upgrade';
@@ -146,25 +148,15 @@ server {
 Note:
 GitHub OAuth and Discord API require HTTPS!
 
-🧾 Slash Commands
+## 🧾 Slash Commands
 ```
 /start-again-delegator — Restart delegator verification
 /start-again-validator — Restart validator verification
 /cleanup-inactive-validators — Remove validator roles from inactive users (on-chain check)
 /cleanup-inactive-delegators — Remove delegator roles from inactive users (on-chain check)
 ```
-🗄️ Database Schema
 
-Table verifications (see init.sql):
-Field	Type	Description
-id	SERIAL	Primary key
-tx_hash	TEXT	Transaction hash
-wallet_address	TEXT	Concordium wallet address
-discord_id	TEXT	User’s Discord ID
-role_type	TEXT	Validator, Delegator, Developer
-verified_at	TIMESTAMP	Verification timestamp
-github_profile	TEXT	GitHub profile (for developer flow)
-📞 Support & Contributions
+## 📞 Support & Contributions
 
 Pull requests are welcome!
 For major changes, please open an issue first to discuss your proposal.
