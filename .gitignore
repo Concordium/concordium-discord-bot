@@ -1,0 +1,15 @@
+# Node.js
+node_modules
+npm-debug.log
+
+# Environment files
+.env
+
+# OS / Editor junk
+.DS_Store
+.vscode/
+.idea/
+
+# Docker
+*.log
+docker-compose.override.yml
