@@ -10,6 +10,7 @@ const { Pool } = require('pg');
 
 const CLIENT_PATH = process.env.CONCORDIUM_CLIENT_PATH;
 const DELEGATOR_ROLE_ID = process.env.DELEGATOR_ROLE_ID;
+const GRPC_IP = process.env.GRPC_IP;
 
 const pool = new Pool({
     user: process.env.PG_USER,
@@ -42,7 +43,7 @@ async function handleCleanupDelegators(interaction) {
         for (const row of dbResult.rows) {
             const { discord_id, wallet_address } = row;
 
-            const cmd = `${CLIENT_PATH} account show ${wallet_address} --grpc-ip grpc.mainnet.concordium.software --secure`;
+            const cmd = `${CLIENT_PATH} account show ${wallet_address} --grpc-ip ${GRPC_IP} --secure`;
 
             const isInactive = await new Promise((resolve) => {
                 exec(cmd, (err, stdout, stderr) => {

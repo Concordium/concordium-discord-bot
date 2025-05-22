@@ -6,6 +6,7 @@ const GUILD_ID = process.env.DISCORD_GUILD_ID;
 const CLAIM_CHANNEL_ID = process.env.CLAIM_CHANNEL_ID;
 const VALIDATOR_ROLE_ID = process.env.VALIDATOR_ROLE_ID;
 const CLIENT_PATH = process.env.CONCORDIUM_CLIENT_PATH;
+const GRPC_IP = process.env.GRPC_IP;
 
 const pool = new Pool({
     user: process.env.PG_USER,
@@ -161,7 +162,7 @@ function listenForValidatorMessages(client) {
                 return message.reply("❌ Please enter a valid numeric validator ID.");
             }
 
-            const cmd = `${CLIENT_PATH} consensus show-parameters --include-bakers --grpc-ip grpc.mainnet.concordium.software --secure | awk '$1 ~ /^${validatorId}:$/ {print $2}'`;
+            const cmd = `${CLIENT_PATH} consensus show-parameters --include-bakers --grpc-ip ${GRPC_IP} --secure | awk '$1 ~ /^${validatorId}:$/ {print $2}'`;
 
             exec(cmd, async (err, stdout) => {
                 if (err || !stdout.trim()) {
@@ -203,7 +204,7 @@ function listenForValidatorMessages(client) {
                 return message.reply("❌ Please enter a valid 64-character transaction hash.");
             }
 
-            const cmd = `${CLIENT_PATH} transaction status ${txHash} --grpc-ip grpc.mainnet.concordium.software --secure`;
+            const cmd = `${CLIENT_PATH} transaction status ${txHash} --grpc-ip ${GRPC_IP} --secure`;
             exec(cmd, async (err, stdout) => {
                 if (err || !stdout.includes("Transaction is finalized") || !stdout.includes('with status "success"')) {
                     return message.reply("❌ Transaction is not finalized or was not successful.");
@@ -231,7 +232,7 @@ function listenForValidatorMessages(client) {
                     return message.reply("❌ Unable to extract block hash to validate transaction time.");
                 }
 
-                const getTimestampCmd = `${CLIENT_PATH} block show ${blockHash} --grpc-ip grpc.mainnet.concordium.software --secure | awk -F': +' '/Block time/ {print $2}'`;
+                const getTimestampCmd = `${CLIENT_PATH} block show ${blockHash} --grpc-ip ${GRPC_IP} --secure | awk -F': +' '/Block time/ {print $2}'`;
 
                 exec(getTimestampCmd, async (timeErr, timeStdout) => {
                     if (timeErr || !timeStdout.trim()) {

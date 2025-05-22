@@ -10,6 +10,7 @@ const { Pool } = require('pg');
 
 const CLIENT_PATH = process.env.CONCORDIUM_CLIENT_PATH;
 const VALIDATOR_ROLE_ID = process.env.VALIDATOR_ROLE_ID;
+const GRPC_IP = process.env.GRPC_IP;
 
 const pool = new Pool({
     user: process.env.PG_USER,
@@ -34,7 +35,7 @@ async function handleCleanupValidators(interaction) {
     try {
         await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
-        const cmd = `${CLIENT_PATH} consensus show-parameters --include-bakers --grpc-ip grpc.mainnet.concordium.software --secure | awk 'NR>4 && NF {print $2}'`;
+        const cmd = `${CLIENT_PATH} consensus show-parameters --include-bakers --grpc-ip ${GRPC_IP} --secure | awk 'NR>4 && NF {print $2}'`;
 
         exec(cmd, async (err, stdout, stderr) => {
             if (err) {

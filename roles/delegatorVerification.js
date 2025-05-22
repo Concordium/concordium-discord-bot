@@ -6,6 +6,7 @@ const GUILD_ID = process.env.DISCORD_GUILD_ID;
 const CLAIM_CHANNEL_ID = process.env.CLAIM_CHANNEL_ID;
 const DELEGATOR_ROLE_ID = process.env.DELEGATOR_ROLE_ID;
 const CLIENT_PATH = process.env.CONCORDIUM_CLIENT_PATH;
+const GRPC_IP = process.env.GRPC_IP;
 
 const pool = new Pool({
     user: process.env.PG_USER,
@@ -206,7 +207,7 @@ function listenForDelegatorMessages(client) {
             }
 
             // Verify delegation status using Concordium client
-            const cmd = `${CLIENT_PATH} account show ${address} --grpc-ip grpc.mainnet.concordium.software --secure`;
+            const cmd = `${CLIENT_PATH} account show ${address} --grpc-ip ${GRPC_IP} --secure`;
             exec(cmd, async (err, stdout) => {
                 if (err || !stdout.includes("Delegation target:")) {
                     return message.reply("❌ This address is not currently delegating to any staking pool.");
@@ -255,7 +256,7 @@ function listenForDelegatorMessages(client) {
             }
 
             // Check transaction status using Concordium client
-            const cmd = `${CLIENT_PATH} transaction status ${txHash} --grpc-ip grpc.mainnet.concordium.software --secure`;
+            const cmd = `${CLIENT_PATH} transaction status ${txHash} --grpc-ip ${GRPC_IP} --secure`;
             exec(cmd, async (err, stdout) => {
                 if (err || !stdout.includes("Transaction is finalized") || !stdout.includes('with status "success"')) {
                     return message.reply("❌ Transaction is not finalized or was not successful.");
@@ -287,7 +288,7 @@ function listenForDelegatorMessages(client) {
                 }
 
                 // Check transaction timestamp (must be within 1 hour)
-                const getTimestampCmd = `${CLIENT_PATH} block show ${blockHash} --grpc-ip grpc.mainnet.concordium.software --secure | awk -F': +' '/Block time/ {print $2}'`;
+                const getTimestampCmd = `${CLIENT_PATH} block show ${blockHash} --grpc-ip ${GRPC_IP} --secure | awk -F': +' '/Block time/ {print $2}'`;
                 exec(getTimestampCmd, async (timeErr, timeStdout) => {
                     if (timeErr || !timeStdout.trim()) {
                         return message.reply("❌ Failed to retrieve block timestamp.");
