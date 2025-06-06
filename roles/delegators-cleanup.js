@@ -45,12 +45,33 @@ async function handleCleanupDelegators(interaction) {
 
             const cmd = `${CLIENT_PATH} account show ${wallet_address} --grpc-ip ${GRPC_IP} --secure`;
 
+            // Delegator activity check with staked amount verification
             const isInactive = await new Promise((resolve) => {
                 exec(cmd, (err, stdout, stderr) => {
                     if (err || !stdout) return resolve(false);
                     const output = stdout.trim();
-                    if (output.includes('Delegation target: Staking pool with ID')) return resolve(false);
+
+                    // If not a validator or delegator, mark as inactive
                     if (output.includes('Validator or delegator: no')) return resolve(true);
+
+                    // If not delegating at all, mark as inactive
+                    if (output.includes('Delegation: not delegating')) return resolve(true);
+
+                    // If there is a delegation target (pool OR passive), always check the staked amount
+                    const delegationTargetMatch = output.match(/Delegation target:\s*(.+)/);
+                    if (delegationTargetMatch) {
+                        const match = output.match(/Staked amount:\s*([0-9.]+)\s*CCD/);
+                        if (match) {
+                            const stakedAmount = parseFloat(match[1]);
+                            // If staked amount is less than 1000 CCD, consider as inactive
+                            if (stakedAmount < 1000) return resolve(true);
+                            else return resolve(false);
+                        }
+                        // If can't parse amount, consider as active just in case
+                        return resolve(false);
+                    }
+
+                    // By default, consider as active
                     return resolve(false);
                 });
             });
