@@ -17,26 +17,18 @@ const pool = new Pool({
 });
 
 const delegatorVerificationState = new Map();
-const INACTIVE_THREAD_CHECK_INTERVAL = 3600000; // Check for inactive threads every 1 hour
-const THREAD_INACTIVITY_LIMIT = 86400000; // Delete threads inactive for 24 hours
+const INACTIVE_THREAD_CHECK_INTERVAL = 60000; // Check for inactive threads every 1 minute
+const THREAD_INACTIVITY_LIMIT = 3600000; // Delete threads inactive for 10 minutes (3600000 for 1 hour)
 
-/**
- * Generates a random numeric MEMO of length between 5 and 10 digits
- * @returns {string} Random numeric string
- */
 function generateRandomMemo() {
-    const length = Math.floor(Math.random() * 6) + 5; // Random length between 5 and 10
+    const length = Math.floor(Math.random() * 6) + 5;
     let result = '';
     for (let i = 0; i < length; i++) {
-        result += Math.floor(Math.random() * 10); // Random digit 0-9
+        result += Math.floor(Math.random() * 10);
     }
     return result;
 }
 
-/**
- * Cleans up inactive verification threads that have been inactive for more than 24 hours
- * @param {Client} client Discord client instance
- */
 async function cleanupInactiveThreads(client) {
     try {
         const now = Date.now();
@@ -46,21 +38,22 @@ async function cleanupInactiveThreads(client) {
         const threads = await verificationChannel.threads.fetchActive();
         
         for (const [, thread] of threads.threads) {
-            // Skip non-delegator threads or non-private threads
             if (thread.type !== ChannelType.PrivateThread || !thread.name.startsWith('delegator-')) continue;
 
-            // Get the last couple messages to check user activity
-            const messages = await thread.messages.fetch({ limit: 2 });
-            if (messages.size < 2) continue; // Skip if only bot messages
-
+            const messages = await thread.messages.fetch({ limit: 100 });
             const lastUserMessage = messages.find(m => !m.author.bot);
-            if (!lastUserMessage) continue;
 
-            // Delete thread if inactive for more than 24 hours
-            if (now - lastUserMessage.createdTimestamp > THREAD_INACTIVITY_LIMIT) {
+            let lastActivityTimestamp;
+            if (lastUserMessage) {
+                lastActivityTimestamp = lastUserMessage.createdTimestamp;
+            } else {
+                lastActivityTimestamp = thread.createdTimestamp;
+            }
+
+            if (now - lastActivityTimestamp > THREAD_INACTIVITY_LIMIT) {
                 try {
-                    await thread.delete('Automatic deletion after 24 hours of inactivity');
-                    const userId = thread.name.split('-')[2]; // Extract user ID from thread name
+                    await thread.delete('Automatic deletion after inactivity');
+                    const userId = thread.name.split('-')[2];
                     delegatorVerificationState.delete(userId);
                 } catch (err) {
                     console.error(`Error deleting inactive thread ${thread.id}:`, err);
@@ -72,26 +65,25 @@ async function cleanupInactiveThreads(client) {
     }
 }
 
-/**
- * Starts the periodic cleanup of inactive threads
- * @param {Client} client Discord client instance
- */
 function startInactiveThreadsCleanup(client) {
     setInterval(() => cleanupInactiveThreads(client), INACTIVE_THREAD_CHECK_INTERVAL);
 }
 
-/**
- * Handles the delegator verification process initiation
- * @param {Interaction} interaction Discord interaction
- * @param {string} discordId User's Discord ID
- * @param {Client} client Discord client
- */
 async function handleDelegatorVerification(interaction, discordId, client) {
+    // Clean up all delegatorVerificationState records with missing threads (threads were deleted manually or expired)
+    for (const [userId, state] of delegatorVerificationState.entries()) {
+        if (state.threadId) {
+            const exists = await client.channels.fetch(state.threadId).catch(() => null);
+            if (!exists) {
+                delegatorVerificationState.delete(userId);
+                console.log('Removed delegatorVerificationState for', userId, 'because thread does not exist');
+            }
+        }
+    }
     try {
         const guild = await client.guilds.fetch(GUILD_ID);
         const member = await guild.members.fetch(discordId);
 
-        // Check if user already has the role
         if (member.roles.cache.has(DELEGATOR_ROLE_ID)) {
             await interaction.reply({
                 content: "✅ You already have the **Delegator** role — no need to verify again.",
@@ -100,7 +92,6 @@ async function handleDelegatorVerification(interaction, discordId, client) {
             return;
         }
 
-        // Check for existing verification thread
         if (delegatorVerificationState.has(discordId)) {
             const existing = delegatorVerificationState.get(discordId);
             const existingThread = await client.channels.fetch(existing.threadId).catch(() => null);
@@ -116,24 +107,22 @@ async function handleDelegatorVerification(interaction, discordId, client) {
             }
         }
 
-        // Start cleanup if not already running
         if (!delegatorVerificationState.cleanupStarted) {
             startInactiveThreadsCleanup(client);
             delegatorVerificationState.cleanupStarted = true;
         }
 
-        // Create private thread for verification
         const verificationChannel = await client.channels.fetch(CLAIM_CHANNEL_ID);
         const thread = await verificationChannel.threads.create({
             name: `delegator-${interaction.user.username}-${interaction.user.id}`,
             type: ChannelType.PrivateThread,
             autoArchiveDuration: 60,
-            reason: `Delegator verification for ${interaction.user.tag}`
+            reason: `Delegator verification for ${interaction.user.tag}`,
+            invitable: false // Prevent anyone from inviting others to the thread
         });
 
         await thread.members.add(interaction.user.id);
 
-        // Store verification state
         delegatorVerificationState.set(discordId, {
             threadId: thread.id,
             step: "awaiting-account-address",
@@ -142,18 +131,16 @@ async function handleDelegatorVerification(interaction, discordId, client) {
         });
 
         await interaction.reply({
-            content: `📩 Verification started.\n👉 [Click here to open your thread](https://discord.com/channels/${GUILD_ID}/${thread.id})`,
+            content: `📩 The delegator verification process has started.\n👉 [Click here to open your thread](https://discord.com/channels/${GUILD_ID}/${thread.id})`,
             flags: MessageFlags.Ephemeral
         });
 
-        // Send initial instructions
         await thread.send(
             `<@${interaction.user.id}> Please send your **account address** to begin verification.\n\n` +
             `**Requirements:**\n` +
-            `- You must be delegating at least **1000 CCD**\n` +
-            `- You have 1 hour to complete each verification step\n` +
-            `- Inactive threads will be deleted after 24 hours\n\n` +
-            `If you entered the wrong address, use \`/start-again-delegator\` to restart.`
+            `- You must be delegating at least **1000 CCD** to any pool.\n` +
+            `If you entered the wrong address, use \`/start-again-delegator\` to restart.\n` +
+			`If you leave this thread inactive for more than **1 hour**, it will be automatically removed.`
         );
     } catch (err) {
         console.error("Delegator verification thread error:", err);
@@ -164,10 +151,6 @@ async function handleDelegatorVerification(interaction, discordId, client) {
     }
 }
 
-/**
- * Listens for delegator verification messages and handles the verification flow
- * @param {Client} client Discord client
- */
 function listenForDelegatorMessages(client) {
     client.on("messageCreate", async (message) => {
         if (!message.channel.isThread()) return;
@@ -180,17 +163,31 @@ function listenForDelegatorMessages(client) {
         state.lastActivity = Date.now();
         delegatorVerificationState.set(message.author.id, state);
 
-        // Check session timeout (1 hour per step)
-        const currentTimestamp = Math.floor(Date.now() / 1000);
-        if (currentTimestamp - (state.createdAt || currentTimestamp) > 3600) {
-            delegatorVerificationState.delete(message.author.id);
-            await message.reply("❌ Your verification session has expired (1 hour limit). Please start a new verification process.");
-            return;
-        }
-
         // Step 1: Waiting for account address
         if (state.step === "awaiting-account-address") {
             const address = message.content.trim();
+
+            // Clean up all delegatorVerificationState records with missing threads (threads were deleted manually or expired)
+            for (const [userId, session] of delegatorVerificationState.entries()) {
+                if (session.threadId) {
+                    const exists = await message.client.channels.fetch(session.threadId).catch(() => null);
+                    if (!exists) {
+                        delegatorVerificationState.delete(userId);
+                        console.log('Removed delegatorVerificationState for', userId, 'because thread does not exist');
+                    }
+                }
+            }
+
+            // Prevent parallel verification of the same account address
+            const isInActiveSession = Array.from(delegatorVerificationState.values()).some(
+                session =>
+                    !!session.delegatorAddress &&
+                    session.delegatorAddress === address &&
+                    session.threadId !== message.channel.id
+            );
+            if (isInActiveSession) {
+                return message.reply("❌ This delegator address is already being verified by another user.");
+            }
 
             // Validate Concordium address format
             if (!/^[1-9A-HJ-NP-Za-km-z]{50,60}$/.test(address)) {
@@ -240,7 +237,7 @@ function listenForDelegatorMessages(client) {
                     `✅ Account verified! Now send a CCD transaction **from this address** with these requirements:\n\n` +
                     `**1.** Send to any address (amount doesn't matter)\n` +
                     `**2.** Use this exact number as MEMO: \`${randomMemo}\`\n` +
-                    `**3.** Transaction must be sent within 1 hour\n\n` +
+                    `**3.** The transaction age must not exceed **1 hour** from the start of verification.\n\n` +
                     `After sending, reply here with the **transaction hash**.`
                 );
             });
@@ -250,12 +247,10 @@ function listenForDelegatorMessages(client) {
         if (state.step === "awaiting-tx-hash") {
             const txHash = message.content.trim().toLowerCase();
             
-            // Validate transaction hash format
             if (!/^[0-9a-f]{64}$/.test(txHash)) {
                 return message.reply("❌ Please enter a valid 64-character transaction hash.");
             }
 
-            // Check transaction status using Concordium client
             const cmd = `${CLIENT_PATH} transaction status ${txHash} --grpc-ip ${GRPC_IP} --secure`;
             exec(cmd, async (err, stdout) => {
                 if (err || !stdout.includes("Transaction is finalized") || !stdout.includes('with status "success"')) {
@@ -264,21 +259,18 @@ function listenForDelegatorMessages(client) {
 
                 const { delegatorAddress, randomMemo } = state;
 
-                // Extract transaction details
                 const senderMatch = stdout.match(/from account '([^']+)'/);
                 const memoMatch = stdout.match(/Transfer memo:\n(.+)/);
                 const blockHashMatch = stdout.match(/Transaction is finalized into block ([0-9a-fA-F]{64})/);
 
                 const sender = senderMatch?.[1];
-                const memo = memoMatch?.[1]?.trim();
+                const memo = memoMatch?.[1];
                 const blockHash = blockHashMatch?.[1];
 
-                // Validate sender address
                 if (!sender || sender !== delegatorAddress) {
                     return message.reply(`❌ Sender address must match your delegator address: \`${delegatorAddress}\``);
                 }
 
-                // Validate MEMO matches our generated number
                 if (!memo || memo !== randomMemo) {
                     return message.reply(`❌ The MEMO must exactly match the generated number: \`${randomMemo}\``);
                 }
@@ -287,7 +279,6 @@ function listenForDelegatorMessages(client) {
                     return message.reply("❌ Unable to extract block hash to validate transaction time.");
                 }
 
-                // Check transaction timestamp (must be within 1 hour)
                 const getTimestampCmd = `${CLIENT_PATH} block show ${blockHash} --grpc-ip ${GRPC_IP} --secure | awk -F': +' '/Block time/ {print $2}'`;
                 exec(getTimestampCmd, async (timeErr, timeStdout) => {
                     if (timeErr || !timeStdout.trim()) {
@@ -301,25 +292,21 @@ function listenForDelegatorMessages(client) {
                         return message.reply("❌ This transaction is older than 1 hour. Please submit a fresh one.");
                     }
 
-                    // Check if transaction was already used
                     const txExists = await pool.query("SELECT * FROM verifications WHERE tx_hash = $1", [txHash]);
                     if (txExists.rowCount > 0) {
                         return message.reply("❌ This transaction has already been used for verification.");
                     }
 
-                    // Store verification in database
                     await pool.query(
                         "INSERT INTO verifications (tx_hash, wallet_address, discord_id, role_type) VALUES ($1, $2, $3, $4)",
                         [txHash, delegatorAddress, message.author.id, "Delegator"]
                     );
 
-                    // Assign delegator role
                     const guild = await client.guilds.fetch(GUILD_ID);
                     const member = await guild.members.fetch(message.author.id);
                     await member.roles.add(DELEGATOR_ROLE_ID);
                     console.log(`Role 'delegator' assigned to user ${message.author.id}`);
 
-                    // Add thread deletion button
                     const row = new ActionRowBuilder().addComponents(
                         new ButtonBuilder()
                             .setCustomId("archive_thread_delegator")
@@ -332,14 +319,12 @@ function listenForDelegatorMessages(client) {
                         components: [row]
                     });
 
-                    // Clean up verification state
                     delegatorVerificationState.delete(message.author.id);
                 });
             });
         }
     });
 
-    // Handle thread deletion button
     client.on("interactionCreate", async (interaction) => {
         if (!interaction.isButton()) return;
 
@@ -355,13 +340,24 @@ function listenForDelegatorMessages(client) {
             }
         }
     });
+
+    // Remove delegator verification state if the thread/channel is deleted manually
+    client.on("channelDelete", async (channel) => {
+        if (
+            channel.type === ChannelType.PrivateThread &&
+            channel.name.startsWith('delegator-')
+        ) {
+            for (const [discordId, state] of delegatorVerificationState.entries()) {
+                if (state.threadId === channel.id) {
+                    delegatorVerificationState.delete(discordId);
+                    console.log('Removed delegatorVerificationState for', discordId, 'due to channelDelete');
+                    break;
+                }
+            }
+        }
+    });
 }
 
-/**
- * Restarts the delegator verification flow
- * @param {Interaction} interaction Discord interaction
- * @param {Client} client Discord client
- */
 module.exports = {
     handleDelegatorVerification,
     listenForDelegatorMessages,
@@ -385,7 +381,6 @@ module.exports = {
             });
         }
 
-        // Reset verification state
         delegatorVerificationState.set(discordId, {
             threadId: thread.id,
             step: "awaiting-account-address",
@@ -399,7 +394,7 @@ module.exports = {
             `**Remember:**\n` +
             `- You must be delegating at least **1000 CCD**\n` +
             `- You have 1 hour to complete each step\n` +
-            `- Inactive threads will be deleted after 24 hours\n\n` +
+            `- Inactive threads will be deleted after 1 hour\n\n` +
             `If you entered the wrong address again, use \`/start-again-delegator\` to restart.`
         );
 

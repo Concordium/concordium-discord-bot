@@ -17,8 +17,8 @@ const pool = new Pool({
 });
 
 const validatorVerificationState = new Map();
-const INACTIVE_THREAD_CHECK_INTERVAL = 3600000; // 1 hour
-const THREAD_INACTIVITY_LIMIT = 86400000; // 24 hours
+const INACTIVE_THREAD_CHECK_INTERVAL = 60000; // 1 minute
+const THREAD_INACTIVITY_LIMIT = 3600000; // Delete threads inactive for 10 minutes (3600000 for 1 hour)
 
 function generateRandomMemo() {
     const length = Math.floor(Math.random() * 6) + 5; // Random length between 5 and 10
@@ -40,15 +40,19 @@ async function cleanupInactiveThreads(client) {
         for (const [, thread] of threads.threads) {
             if (thread.type !== ChannelType.PrivateThread || !thread.name.startsWith('validator-')) continue;
 
-            const messages = await thread.messages.fetch({ limit: 2 });
-            if (messages.size < 2) continue;
-
+            const messages = await thread.messages.fetch({ limit: 100 });
             const lastUserMessage = messages.find(m => !m.author.bot);
-            if (!lastUserMessage) continue;
 
-            if (now - lastUserMessage.createdTimestamp > THREAD_INACTIVITY_LIMIT) {
+            let lastActivityTimestamp;
+            if (lastUserMessage) {
+                lastActivityTimestamp = lastUserMessage.createdTimestamp;
+            } else {
+                lastActivityTimestamp = thread.createdTimestamp;
+            }
+
+            if (now - lastActivityTimestamp > THREAD_INACTIVITY_LIMIT) {
                 try {
-                    await thread.delete('Automatic deletion after 24 hours of inactivity');
+                    await thread.delete('Automatic deletion after inactivity');
                     const userId = thread.name.split('-')[2];
                     validatorVerificationState.delete(userId);
                 } catch (err) {
@@ -66,6 +70,17 @@ function startInactiveThreadsCleanup(client) {
 }
 
 async function handleValidatorVerification(interaction, discordId, client) {
+    // Clean up all validatorVerificationState records with missing threads (threads were deleted manually or expired)
+    for (const [userId, state] of validatorVerificationState.entries()) {
+        if (state.threadId) {
+            const exists = await client.channels.fetch(state.threadId).catch(() => null);
+            if (!exists) {
+                validatorVerificationState.delete(userId);
+                console.log('Removed validatorVerificationState for', userId, 'because thread does not exist');
+            }
+        }
+    }
+
     try {
         const guild = await client.guilds.fetch(GUILD_ID);
         const member = await guild.members.fetch(discordId);
@@ -103,7 +118,8 @@ async function handleValidatorVerification(interaction, discordId, client) {
             name: `validator-${interaction.user.username}-${interaction.user.id}`,
             type: ChannelType.PrivateThread,
             autoArchiveDuration: 60,
-            reason: `Validator verification for ${interaction.user.tag}`
+            reason: `Validator verification for ${interaction.user.tag}`,
+			invitable: false
         });
 
         await thread.members.add(interaction.user.id);
@@ -116,15 +132,14 @@ async function handleValidatorVerification(interaction, discordId, client) {
         });
 
         await interaction.reply({
-            content: `📩 Verification started.\n👉 [Click here to open your thread](https://discord.com/channels/${GUILD_ID}/${thread.id})`,
+            content: `📩 The validator verification process has started.\n👉 [Click here to open your thread](https://discord.com/channels/${GUILD_ID}/${thread.id})`,
             flags: MessageFlags.Ephemeral
         });
 
         await thread.send(
             `<@${interaction.user.id}> Please send your **validator ID** to begin verification (e.g. 12345).\n\n` +
             `**Important notes:**\n` +
-            `- You have 1 hour to complete each step of the verification process\n` +
-            `- If you leave this thread inactive for 24 hours, it will be automatically deleted\n` +
+            `- If you leave this thread inactive for 1 hour, it will be automatically deleted\n` +
             `- If you entered the wrong ID, you can use the command \`/start-again-validator\` to restart`
         );
     } catch (err) {
@@ -148,14 +163,6 @@ function listenForValidatorMessages(client) {
         state.lastActivity = Date.now();
         validatorVerificationState.set(message.author.id, state);
 
-        // Check session timeout
-        const currentTimestamp = Math.floor(Date.now() / 1000);
-        if (currentTimestamp - (state.createdAt || currentTimestamp) > 3600) {
-            validatorVerificationState.delete(message.author.id);
-            await message.reply("❌ Your verification session has expired (1 hour limit). Please start a new verification process.");
-            return;
-        }
-
         if (state.step === "awaiting-validator-id") {
             const validatorId = message.content.trim();
             if (!/^\d+$/.test(validatorId)) {
@@ -170,6 +177,29 @@ function listenForValidatorMessages(client) {
                 }
 
                 const validatorAddress = stdout.trim();
+
+                // Clean up all validatorVerificationState records with missing threads (threads were deleted manually or expired)
+                for (const [userId, session] of validatorVerificationState.entries()) {
+                    if (session.threadId) {
+                        const exists = await message.client.channels.fetch(session.threadId).catch(() => null);
+                        if (!exists) {
+                            validatorVerificationState.delete(userId);
+                            console.log('Removed validatorVerificationState for', userId, 'because thread does not exist');
+                        }
+                    }
+                }
+
+                // Prevent parallel verification of the same validator address
+                // Only sessions where validatorAddress is already set and thread exists block verification
+                const isInActiveSession = Array.from(validatorVerificationState.values()).some(
+                    session =>
+                        !!session.validatorAddress &&
+                        session.validatorAddress === validatorAddress &&
+                        session.threadId !== message.channel.id
+                );
+                if (isInActiveSession) {
+                    return message.reply("❌ This validator is already being verified by another user.");
+                }
 
                 const exists = await pool.query("SELECT * FROM verifications WHERE wallet_address = $1 AND role_type = 'Validator'", [validatorAddress]);
                 if (exists.rowCount > 0) {
@@ -217,7 +247,7 @@ function listenForValidatorMessages(client) {
                 const blockHashMatch = stdout.match(/Transaction is finalized into block ([0-9a-fA-F]{64})/);
 
                 const sender = senderMatch?.[1];
-                const memo = memoMatch?.[1]?.trim();
+                const memo = memoMatch?.[1];
                 const blockHash = blockHashMatch?.[1];
 
                 if (!sender || sender !== validatorAddress) {
@@ -294,6 +324,22 @@ function listenForValidatorMessages(client) {
             }
         }
     });
+
+    // Remove validator verification state if the thread/channel is deleted manually
+    client.on("channelDelete", async (channel) => {
+        if (
+            channel.type === ChannelType.PrivateThread &&
+            channel.name.startsWith('validator-')
+        ) {
+            for (const [discordId, state] of validatorVerificationState.entries()) {
+                if (state.threadId === channel.id) {
+                    validatorVerificationState.delete(discordId);
+                    console.log('Removed validatorVerificationState for', discordId, 'due to channelDelete');
+                    break;
+                }
+            }
+        }
+    });
 }
 
 module.exports = {
@@ -331,7 +377,7 @@ module.exports = {
             `Please send your **validator ID** again (e.g. \`12345\`).\n\n` +
             `**Remember:**\n` +
             `- You have 1 hour to complete each step\n` +
-            `- Inactive threads will be deleted after 24 hours\n` +
+            `- Inactive threads will be deleted after 1 hour\n` +
             `- Use \`/start-again-validator\` if you need to restart again`
         );
 
