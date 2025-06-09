@@ -18,7 +18,7 @@ const pool = new Pool({
 
 const validatorVerificationState = new Map();
 const INACTIVE_THREAD_CHECK_INTERVAL = 60000; // 1 minute
-const THREAD_INACTIVITY_LIMIT = 3600000; // Delete threads inactive for 10 minutes (3600000 for 1 hour)
+const THREAD_INACTIVITY_LIMIT = 3600000; // 1 hour
 
 function generateRandomMemo() {
     const length = Math.floor(Math.random() * 6) + 5; // Random length between 5 and 10
@@ -119,7 +119,7 @@ async function handleValidatorVerification(interaction, discordId, client) {
             type: ChannelType.PrivateThread,
             autoArchiveDuration: 60,
             reason: `Validator verification for ${interaction.user.tag}`,
-			invitable: false
+            invitable: false
         });
 
         await thread.members.add(interaction.user.id);
@@ -157,7 +157,17 @@ function listenForValidatorMessages(client) {
         if (message.author.bot) return;
 
         const state = validatorVerificationState.get(message.author.id);
-        if (!state || state.threadId !== message.channel.id) return;
+		if (!state) {
+			// Additional: Check if channel is a verification thread (optional, for more accuracy)
+			if (message.channel.name.startsWith('validator-')) {
+				await message.reply(
+					"⚠️ The verification process for this thread is no longer active due to bot restarting. " +
+					"Please start the verification process again in the <#1350064379936116829> channel"
+				);
+			}
+			return;
+		}
+		if (state.threadId !== message.channel.id) return;
 
         // Update last activity timestamp
         state.lastActivity = Date.now();
@@ -171,9 +181,31 @@ function listenForValidatorMessages(client) {
 
             const cmd = `${CLIENT_PATH} consensus show-parameters --include-bakers --grpc-ip ${GRPC_IP} --secure | awk '$1 ~ /^${validatorId}:$/ {print $2}'`;
 
-            exec(cmd, async (err, stdout) => {
-                if (err || !stdout.trim()) {
+            exec(cmd, async (err, stdout, stderr) => {
+                const errorText = (err?.message || "") + (stderr || "") + (stdout || "");
+                // check for connection error with GRPC node
+                if (
+                    errorText.includes("Cannot establish connection to GRPC endpoint") ||
+                    errorText.includes("I/O error") ||
+                    errorText.includes("failed to connect") ||
+                    errorText.includes("ECONNREFUSED") ||
+                    errorText.includes("connection timed out") ||
+                    errorText.includes("unavailable")
+                ) {
+                    return message.reply(
+                        "⚠️ The verification service is temporarily unavailable (connection to Concordium node failed).\n" +
+                        "Please try again later."
+                    );
+                }
+
+                // If the command was successfully executed, but there is no output, then the ID was not found
+                if (!stdout.trim()) {
                     return message.reply("❌ Failed to retrieve validator address. Please double-check the ID.");
+                }
+
+                // If another error occurred, we display a standard message
+                if (err) {
+                    return message.reply("❌ An unexpected error occurred while checking your validator ID. Please try again or contact support.");
                 }
 
                 const validatorAddress = stdout.trim();
@@ -221,7 +253,8 @@ function listenForValidatorMessages(client) {
                     `✅ Your validator address is: \`${validatorAddress}\`\n\n` +
                     `Now send a CCD transaction **from this address to any address**, using this generated number as the MEMO: \`${randomMemo}\`\n\n` +
                     `**Transaction requirements:**\n` +
-                    `- Must be sent within 1 hour\n` +
+                    `- Any CCD amount (e.g. 0.000001)\n` +
+					`- Must be sent within 1 hour\n` +
                     `- MEMO must exactly match: \`${randomMemo}\`\n` +
                     `- Reply here with the transaction hash when done`
                 );
@@ -235,7 +268,23 @@ function listenForValidatorMessages(client) {
             }
 
             const cmd = `${CLIENT_PATH} transaction status ${txHash} --grpc-ip ${GRPC_IP} --secure`;
-            exec(cmd, async (err, stdout) => {
+            exec(cmd, async (err, stdout, stderr) => {
+                const errorText = (err?.message || "") + (stderr || "") + (stdout || "");
+                // GRPC error checking
+                if (
+                    errorText.includes("Cannot establish connection to GRPC endpoint") ||
+                    errorText.includes("I/O error") ||
+                    errorText.includes("failed to connect") ||
+                    errorText.includes("ECONNREFUSED") ||
+                    errorText.includes("connection timed out") ||
+                    errorText.includes("unavailable")
+                ) {
+                    return message.reply(
+                        "⚠️ The verification service is temporarily unavailable (connection to Concordium node failed).\n" +
+                        "Please try again later."
+                    );
+                }
+
                 if (err || !stdout.includes("Transaction is finalized") || !stdout.includes('with status "success"')) {
                     return message.reply("❌ Transaction is not finalized or was not successful.");
                 }
@@ -264,7 +313,22 @@ function listenForValidatorMessages(client) {
 
                 const getTimestampCmd = `${CLIENT_PATH} block show ${blockHash} --grpc-ip ${GRPC_IP} --secure | awk -F': +' '/Block time/ {print $2}'`;
 
-                exec(getTimestampCmd, async (timeErr, timeStdout) => {
+                exec(getTimestampCmd, async (timeErr, timeStdout, timeStderr) => {
+                    const timeErrorText = (timeErr?.message || "") + (timeStderr || "") + (timeStdout || "");
+                    if (
+                        timeErrorText.includes("Cannot establish connection to GRPC endpoint") ||
+                        timeErrorText.includes("I/O error") ||
+                        timeErrorText.includes("failed to connect") ||
+                        timeErrorText.includes("ECONNREFUSED") ||
+                        timeErrorText.includes("connection timed out") ||
+                        timeErrorText.includes("unavailable")
+                    ) {
+                        return message.reply(
+                            "⚠️ The verification service is temporarily unavailable (connection to Concordium node failed).\n" +
+                            "Please try again later."
+                        );
+                    }
+
                     if (timeErr || !timeStdout.trim()) {
                         return message.reply("❌ Failed to retrieve block timestamp.");
                     }
