@@ -363,7 +363,7 @@ function listenForValidatorMessages(client) {
                     );
 
                     await message.reply({
-                        content: "🎉 You have been successfully verified as a **Validator** and your role has been assigned! You can now delete this thread.",
+                        content: "🎉 You have been successfully verified as a **Validator** and your role has been assigned! You now have access to the private validators channel: <https://discord.com/channels/667378330923696158/1374009219753316474>\n\nYou can now delete this thread.",
                         components: [row]
                     });
 
