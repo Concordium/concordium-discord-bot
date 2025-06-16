@@ -1,5 +1,6 @@
 # Use official Node.js image
-FROM node:20
+ARG build_image="node:20"
+FROM ${build_image}
 
 # Install system dependencies
 RUN apt-get update && apt-get install -y curl
