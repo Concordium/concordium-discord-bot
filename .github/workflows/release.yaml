@@ -1,0 +1,14 @@
+on:
+  push:
+    tags:
+      - discord-bot/*
+
+jobs:
+  release-discord-bot-image:
+    uses: concordium/.github/.github/workflows/docker-release-workflow.yaml@v1
+    with:
+      SERVICE_NAME: "discord-bot"
+      BUILD_ARGS: |
+        build_image=node:20
+      DOCKER_FILE_PATH: Dockerfile
+    secrets: inherit
