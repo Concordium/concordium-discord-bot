@@ -201,7 +201,7 @@ module.exports.saveDeveloperVerification = async function (discordId, githubProf
 module.exports.checkDuplicateGithubProfile = async function (githubProfileUrl) {
     try {
         const result = await pool.query(
-            "SELECT 1 FROM verifications WHERE github_profile = $1 AND role_type = 'Dev'",
+            "SELECT 1 FROM verifications WHERE github_profile = $1 AND role_type = 'Developer'",
             [githubProfileUrl]
         );
         return result.rowCount > 0;
