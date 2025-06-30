@@ -415,7 +415,7 @@ module.exports = {
         const existingState = validatorVerificationState.get(discordId);
         if (!existingState) {
             return interaction.reply({
-                content: "⚠️ You don't have an active verification thread. Please start the verification using the dropdown menu.",
+                content: "⚠️ You don't have an active validator verification thread. Please start the verification using the dropdown menu.",
                 flags: MessageFlags.Ephemeral
             });
         }
