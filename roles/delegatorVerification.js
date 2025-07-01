@@ -432,7 +432,7 @@ module.exports = {
         if (!thread) {
             delegatorVerificationState.delete(discordId);
             return interaction.reply({
-                content: "⚠️ Your previous verification thread could not be found. Please start again from the dropdown menu.",
+                content: "⚠️ Your previous delegator verification thread could not be found. Please start again from the dropdown menu.",
                 flags: MessageFlags.Ephemeral
             });
         }

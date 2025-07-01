@@ -424,7 +424,7 @@ module.exports = {
         if (!thread) {
             validatorVerificationState.delete(discordId);
             return interaction.reply({
-                content: "⚠️ Your previous verification thread could not be found. Please start again from the dropdown menu.",
+                content: "⚠️ Your previous validator verification thread could not be found. Please start again from the dropdown menu.",
                 flags: MessageFlags.Ephemeral
             });
         }
