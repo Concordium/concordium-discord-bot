@@ -7,6 +7,8 @@ const CLAIM_CHANNEL_ID = process.env.CLAIM_CHANNEL_ID;
 const VALIDATOR_ROLE_ID = process.env.VALIDATOR_ROLE_ID;
 const CLIENT_PATH = process.env.CONCORDIUM_CLIENT_PATH;
 const GRPC_IP = process.env.GRPC_IP;
+const VALIDATOR_CHANNEL_ID = process.env.VALIDATOR_CHANNEL_ID;
+const MOD_LOGS_CHANNEL_ID = process.env.MOD_LOGS_CHANNEL_ID;
 
 const pool = new Pool({
     user: process.env.PG_USER,
@@ -157,12 +159,13 @@ function listenForValidatorMessages(client) {
         if (message.author.bot) return;
 
         const state = validatorVerificationState.get(message.author.id);
+        if (state?.completed) return;
 		if (!state) {
 			// Additional: Check if channel is a verification thread (optional, for more accuracy)
 			if (message.channel.name.startsWith('validator-')) {
 				await message.reply(
 					"⚠️ The verification process for this thread is no longer active due to bot restarting. " +
-					"Please start the verification process again in the <#1350064379936116829> channel"
+					`Please start the verification process again in the <#${CLAIM_CHANNEL_ID}> channel`
 				);
 			}
 			return;
@@ -355,6 +358,17 @@ function listenForValidatorMessages(client) {
                     await member.roles.add(VALIDATOR_ROLE_ID);
                     console.log(`Role 'validator' successfully assigned to user ${message.author.id}`);
 
+                    try {
+                        const modChannel = await client.channels.fetch(MOD_LOGS_CHANNEL_ID);
+                        if (modChannel?.isTextBased?.()) {
+                            await modChannel.send(
+                                `✅ Assigned <@&${VALIDATOR_ROLE_ID}> to <@${message.author.id}> after successful validator on-chain verification.`
+                            );
+                        }
+                    } catch (err) {
+                        console.error("❌ Failed to send validator assignment log to mod channel:", err);
+                    }
+
                     const row = new ActionRowBuilder().addComponents(
                         new ButtonBuilder()
                             .setCustomId("archive_thread_validator")
@@ -363,11 +377,12 @@ function listenForValidatorMessages(client) {
                     );
 
                     await message.reply({
-                        content: "🎉 You have been successfully verified as a **Validator** and your role has been assigned! You now have access to the private validators channel: <https://discord.com/channels/667378330923696158/1374009219753316474>\n\nYou can now delete this thread.",
+                        content: `🎉 You have been successfully verified as a <@&${VALIDATOR_ROLE_ID}> and your role has been assigned! You now have access to the private validators channel: <#${VALIDATOR_CHANNEL_ID}>\n\nYou can now delete this thread.`,
+                        allowedMentions: { parse: [] },
                         components: [row]
                     });
 
-                    validatorVerificationState.delete(message.author.id);
+                    validatorVerificationState.set(message.author.id, { completed: true });
                 });
             });
         }

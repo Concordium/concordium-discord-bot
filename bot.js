@@ -13,27 +13,13 @@ const {
 } = require("discord.js");
 
 const axios = require("axios");
+const cron = require("node-cron");
 
 const handleDevVerification = require("./roles/devVerification");
-
-const {
-    handleValidatorVerification,
-    listenForValidatorMessages,
-    restartValidatorFlow
-} = require("./roles/validatorVerification");
-
-const {
-    handleDelegatorVerification,
-    listenForDelegatorMessages,
-    restartDelegatorFlow
-} = require("./roles/delegatorVerification");
-
-const { handleCleanupValidators, handleCleanupConfirmation } = require("./roles/validators-cleanup");
-
-const {
-    handleCleanupDelegators,
-    handleCleanupDelegatorConfirmation
-} = require("./roles/delegators-cleanup");
+const { handleValidatorVerification, listenForValidatorMessages, restartValidatorFlow } = require("./roles/validatorVerification");
+const { handleDelegatorVerification, listenForDelegatorMessages, restartDelegatorFlow } = require("./roles/delegatorVerification");
+const { handleCleanupValidators, handleCleanupConfirmation, startScheduledValidatorCleanup } = require("./roles/validators-cleanup");
+const { handleCleanupDelegators, handleCleanupDelegatorConfirmation, startScheduledDelegatorCleanup } = require("./roles/delegators-cleanup");
 
 const setupAutoModIntegration = require("./utils/automodIntegration");
 
@@ -87,6 +73,12 @@ client.once("ready", async () => {
     } catch (err) {
         console.error("❌ Failed to register slash commands:", err);
     }
+
+    // Start scheduled cleanup for validators
+    startScheduledValidatorCleanup(client);
+
+    // Start scheduled cleanup for delegators
+    startScheduledDelegatorCleanup(client);
 });
 
 // !setup command restricted to TEAM_ROLE_ID

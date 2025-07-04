@@ -7,6 +7,7 @@ const CLAIM_CHANNEL_ID = process.env.CLAIM_CHANNEL_ID;
 const DELEGATOR_ROLE_ID = process.env.DELEGATOR_ROLE_ID;
 const CLIENT_PATH = process.env.CONCORDIUM_CLIENT_PATH;
 const GRPC_IP = process.env.GRPC_IP;
+const MOD_LOGS_CHANNEL_ID = process.env.MOD_LOGS_CHANNEL_ID;
 
 const pool = new Pool({
     user: process.env.PG_USER,
@@ -157,11 +158,12 @@ function listenForDelegatorMessages(client) {
         if (message.author.bot) return;
 
         const state = delegatorVerificationState.get(message.author.id);
+        if (state?.completed) return;
 		if (!state) {
 			if (message.channel.name.startsWith('delegator-')) {
 				await message.reply(
 					"⚠️ The verification process for this thread is no longer active due to bot restarting. " +
-					"Please start the verification process again in the <#1350064379936116829> channel"
+					`Please start the verification process again in the <#${CLAIM_CHANNEL_ID}> channel`
 				);
 			}
 			return;
@@ -363,6 +365,17 @@ function listenForDelegatorMessages(client) {
                     await member.roles.add(DELEGATOR_ROLE_ID);
                     console.log(`Role 'delegator' assigned to user ${message.author.id}`);
 
+                    try {
+                        const modChannel = await client.channels.fetch(MOD_LOGS_CHANNEL_ID);
+                        if (modChannel?.isTextBased?.()) {
+                            await modChannel.send(
+                                `✅ Assigned <@&${DELEGATOR_ROLE_ID}> to <@${message.author.id}> after successful delegator on-chain verification.`
+                            );
+                        }
+                    } catch (err) {
+                        console.error("❌ Failed to send delegator assignment log to mod channel:", err);
+                    }
+
                     const row = new ActionRowBuilder().addComponents(
                         new ButtonBuilder()
                             .setCustomId("archive_thread_delegator")
@@ -371,11 +384,12 @@ function listenForDelegatorMessages(client) {
                     );
 
                     await message.reply({
-                        content: "🎉 You have been successfully verified as a **Delegator** and your role has been assigned! You can now delete this thread.",
+                        content: `🎉 You have been successfully verified as a <@&${DELEGATOR_ROLE_ID}> and your role has been assigned! You can now delete this thread.`,
+                        allowedMentions: { parse: [] },
                         components: [row]
                     });
 
-                    delegatorVerificationState.delete(message.author.id);
+                    delegatorVerificationState.set(message.author.id, { completed: true });
                 });
             });
         }

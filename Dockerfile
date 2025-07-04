@@ -6,7 +6,7 @@ FROM ${build_image}
 RUN apt-get update && apt-get install -y curl
 
 # Install concordium-client CLI
-RUN curl -L https://distribution.concordium.software/tools/linux/concordium-client_8.0.0-5 \
+RUN curl -L https://distribution.concordium.software/tools/linux/concordium-client_8.1.0-1 \
     -o /usr/bin/concordium-client && \
     chmod +x /usr/bin/concordium-client
 
