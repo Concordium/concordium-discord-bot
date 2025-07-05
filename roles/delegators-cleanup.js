@@ -100,8 +100,12 @@ async function handleCleanupDelegators(interaction, options = {}) {
         }
 
         if (inactive.length === 0) {
-            return interaction.editReply?.({ content: '✅ All registered delegators are currently active.' }) ||
-                   interaction.reply?.({ content: '✅ All registered delegators are currently active.' });
+            const msg = '✅ All registered delegators are currently active.';
+            if (isAuto) {
+                await logToModChannel(interaction.client, `🧹 **Auto-cleanup report**\n${msg}`);
+            }
+            return interaction.editReply?.({ content: msg }) ||
+                interaction.reply?.({ content: msg });
         }
 
         if (isAuto) {

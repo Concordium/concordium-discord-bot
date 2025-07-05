@@ -102,7 +102,11 @@ async function handleCleanupValidators(interaction, options = { autoConfirm: fal
             const allInactive = [...inactiveValidators, ...suspendedValidators];
 
             if (allInactive.length === 0) {
-                return interaction.editReply?.({ content: '✅ All registered validators are currently active.' });
+                const msg = '✅ All registered validators are currently active.';
+                if (options.autoConfirm) {
+                    await logToModChannel(interaction.client, `🧹 **Auto-cleanup report**\n${msg}`);
+                }
+                return interaction.editReply?.({ content: msg });
             }
 
             if (options.autoConfirm) {
