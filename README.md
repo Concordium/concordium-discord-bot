@@ -38,6 +38,9 @@ Supports automatic cleanup of inactive validators and delegators using on-chain 
 ├── docker-compose.yml
 ├── .env.template # Example environment file
 ├── init.sql # SQL for verification table initialization
+├── modules/
+│ ├── notifyDelegatorsOfSuspendedValidators.js # notify delegators that the validator they are delegating to has been suspended
+│ ├── notifySuspendedValidators.js # notify validators that their validator has been suspended
 ├── utils/
 │ ├── automodIntegration.js # Discord AutoModeration integration
 ├── roles/
