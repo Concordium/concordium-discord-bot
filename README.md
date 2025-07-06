@@ -56,32 +56,37 @@ Use `.env.template` as a starting point and rename it to `.env`.
 Make sure to fill in all required fields (Discord token, GitHub OAuth, database credentials, etc.).
 
 ```
-# Discord & GitHub OAuth
+# Server Configuration
 SERVER_URL=
 REDIRECT_URI=
+
+# Github App OAuth Configuration
 CLIENT_ID=
 CLIENT_SECRET=
 
-# concordium-client
-CONCORDIUM_CLIENT_PATH=\usr\bin\concordium-client
+# Concordium stuff
+CONCORDIUM_CLIENT_PATH=
+GRPC_IP=
 
-# Discord Bot
+# Discord Bot Configuration
 DISCORD_BOT_TOKEN=
 DISCORD_GUILD_ID=
 
-# Roles
+# Discord Roles
 TEAM_ROLE_ID=
 VALIDATOR_ROLE_ID=
 DEV_ROLE_ID=
 DELEGATOR_ROLE_ID=
 
-# Channels
+# Discord Channels
 CLAIM_CHANNEL_ID=
+VALIDATOR_CHANNEL_ID=
+MOD_LOGS_CHANNEL_ID=
 
-# AutoModeration
+# Discord AutoModeration rule ID
 AUTOMOD_RULE_ID=
 
-# PostgreSQL
+# PostgreSQL Database Configuration
 PG_USER=
 PG_HOST=
 PG_DATABASE=

@@ -20,8 +20,9 @@ const { handleValidatorVerification, listenForValidatorMessages, restartValidato
 const { handleDelegatorVerification, listenForDelegatorMessages, restartDelegatorFlow } = require("./roles/delegatorVerification");
 const { handleCleanupValidators, handleCleanupConfirmation, startScheduledValidatorCleanup } = require("./roles/validators-cleanup");
 const { handleCleanupDelegators, handleCleanupDelegatorConfirmation, startScheduledDelegatorCleanup } = require("./roles/delegators-cleanup");
-
 const setupAutoModIntegration = require("./utils/automodIntegration");
+const { startDelegatorSuspensionNotifier } = require("./modules/notifyDelegatorsOfSuspendedValidators");
+const { startSuspendedValidatorNotifier } = require("./modules/notifySuspendedValidators");
 
 const DISCORD_BOT_TOKEN = process.env.DISCORD_BOT_TOKEN;
 const TEAM_ROLE_ID = process.env.TEAM_ROLE_ID;
@@ -79,6 +80,10 @@ client.once("ready", async () => {
 
     // Start scheduled cleanup for delegators
     startScheduledDelegatorCleanup(client);
+
+    startDelegatorSuspensionNotifier(client);
+    
+    startSuspendedValidatorNotifier(client);
 });
 
 // !setup command restricted to TEAM_ROLE_ID
