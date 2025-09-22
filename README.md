@@ -1,162 +1,100 @@
-# 🤖 Concordium Discord Verification Bot
-
-A Discord bot for the Concordium ecosystem, providing **on-chain verification** and role management for server members: **Validators**, **Delegators**, and **Developers**.  
-Supports automatic cleanup of inactive validators and delegators using on-chain activity checks.
-
----
-
-## 🚀 Key Features
-
-- **Multi-step verification flows**:
-  - **Delegator:** On-chain delegation check.
-  - **Validator:** On-chain validation check.
-  - **Developer:** OAuth2 via GitHub, repository analysis, and role assignment.
-- **Smart role assignment** after wallet or GitHub account verification.
-- **Verification history in PostgreSQL** — prevents duplicates and enables auditing.
-- **Private threads** for each user during verification.
-- **AutoModeration integration** for increased security.
-- **Secure backend:** Uses `concordium-client` and centralized management through slash commands.
-- **Fully Dockerized deployment**.
-- **Cleanup of inactive** validators and delegators via on-chain logic.
-
----
-
-## 🛠 Requirements
-
-- **Docker** & **Docker Compose**
-- **PostgreSQL**
-- `concordium-client` (installed in the container)
-
----
-
-## 📁 Project Structure
-
-```
-├── bot.js # Discord bot core logic
-├── server.js # Express server (GitHub OAuth + state handling)
-├── Dockerfile
-├── docker-compose.yml
-├── .env.template # Example environment file
-├── init.sql # SQL for verification table initialization
-├── utils/
-│ ├── automodIntegration.js # Discord AutoModeration integration
-├── roles/
-│ ├── delegators-cleanup.js # Inactive delegator cleanup
-│ ├── validators-cleanup.js # Inactive validator cleanup
-│ ├── delegatorVerification.js # Delegator verification
-│ ├── devVerification.js # Developer verification
-│ └── validatorVerification.js # Validator verification
-```
-
----
-
-## ⚙️ Environment Configuration (`.env`)
-
-Use `.env.template` as a starting point and rename it to `.env`.  
-Make sure to fill in all required fields (Discord token, GitHub OAuth, database credentials, etc.).
-
-```
-# Discord & GitHub OAuth
-SERVER_URL=
-REDIRECT_URI=
-CLIENT_ID=
-CLIENT_SECRET=
-
-# concordium-client
-CONCORDIUM_CLIENT_PATH=\usr\bin\concordium-client
-
 # Discord Bot
-DISCORD_BOT_TOKEN=
-DISCORD_GUILD_ID=
 
-# Roles
-TEAM_ROLE_ID=
-VALIDATOR_ROLE_ID=
-DEV_ROLE_ID=
-DELEGATOR_ROLE_ID=
+This repository contains a Discord bot designed for community management and blockchain integration within the **Concordium ecosystem**.  
+The bot helps automate verification, assign roles, monitor validator and delegator activity, and deliver timely updates to community members directly in Discord.
 
-# Channels
-CLAIM_CHANNEL_ID=
+---
 
-# AutoModeration
-AUTOMOD_RULE_ID=
+## Purpose
 
-# PostgreSQL
-PG_USER=
-PG_HOST=
-PG_DATABASE=
-PG_PASSWORD=
-PG_PORT=
-```
+The main goal of this bot is to connect a Discord community with real-time data and activities happening on the Concordium blockchain.  
+It ensures that users are accurately verified, their roles reflect their on-chain status, and they remain informed about important updates related to validators, delegators, and developers.
 
-## 🐳 Docker Deployment
+By automating these tasks, the bot reduces manual workload for moderators, improves transparency, and provides a more reliable experience for participants in the Concordium ecosystem.
 
-Check and fill your .env file as described above.
-Build and run the containers:
+---
 
-```
-docker compose build
-docker compose up -d
-```
+## Core Features
 
-View logs:
-```
-docker compose logs -f
-```
+### 1. **User Verification**
+- Supports verification for three primary community roles:
+  - **Validator**
+  - **Delegator**
+  - **Developer**
+- Uses blockchain queries to confirm authenticity before assigning roles.  
+- Stores verification data in PostgreSQL for consistency and auditability.
 
-## 🌐 Proxy & Security (nginx)
+### 2. **Automated Role Assignment**
+- Assigns Discord roles based on a user’s on-chain status.  
+- Revokes or adjusts roles automatically if conditions change.  
 
-GitHub OAuth requires a reverse proxy with HTTPS support.
-See example configuration below (replace yourdomain.com with your real domain):
+### 3. **Notifications**
+- Sends automated alerts to verified users, such as:
+  - Validator suspension events.  
+  - Commission changes in validator pools.  
+  - Updates in delegation targets for delegators.  
+- Direct messages can be personalized, and users can opt in or out via notification preferences.  
+- Helps community members act quickly when important changes occur.
 
-```
-server {
-    server_name yourdomain.com;
+### 4. **Monitoring and Logging**
+- Continuously tracks blockchain events (transactions, validator lists, pool status).  
+- Keeps logs of role assignments, status changes, and alerts.  
+- Provides a reliable history for moderators and developers.
 
-    location /save-state {
-        proxy_pass http://docker-container-ip-address:3000;
-        proxy_http_version 1.1;
-        proxy_set_header Upgrade $http_upgrade;
-        proxy_set_header Connection 'upgrade';
-        proxy_set_header Host $host;
-        proxy_cache_bypass $http_upgrade;
-    }
+### 5. **Community Management Tools**
+- Thread cleanup and integration with Discord’s AutoMod system.  
+- Automatic removal of roles and database entries if a user leaves the server.  
+- Flexible configuration for different communities within the same ecosystem.
 
-    location /callback {
-        proxy_pass http://docker-container-ip-address:3000;
-        proxy_http_version 1.1;
-        proxy_set_header Upgrade $http_upgrade;
-        proxy_set_header Connection 'upgrade';
-        proxy_set_header Host $host;
-        proxy_cache_bypass $http_upgrade;
-    }
+### 6. **Database Integration**
+- PostgreSQL schema (`init.sql`) defines multiple tables:
+  - **verifications** — stores user identities, roles, and statuses.  
+  - **validator_commissions** — tracks commission rates and changes.  
+  - **notification_prefs** — manages user preferences for receiving alerts.  
+  - **validator_delegators** — maps delegators to their validators.  
+- Database ensures persistence, consistency, and traceability across all features.
 
-    listen 443 ssl;
-    ssl_certificate /etc/letsencrypt/live/yourdomain.com/fullchain.pem;
-    ssl_certificate_key /etc/letsencrypt/live/yourdomain.com/privkey.pem;
-    include /etc/letsencrypt/options-ssl-nginx.conf;
-    ssl_dhparam /etc/letsencrypt/ssl-dhparams.pem;
-}
+---
 
-server {
-    listen 80;
-    server_name yourdomain.com;
-    return 301 https://$host$request_uri;
-}
-```
+## Benefits
 
-Note:
-GitHub OAuth and Discord API require HTTPS!
+- **Automation** — Reduces manual intervention in assigning roles and notifying members.  
+- **Accuracy** — Keeps Discord roles synchronized with real blockchain data.  
+- **Transparency** — Ensures users understand why they have certain roles and when changes occur.  
+- **Community Trust** — Strengthens confidence by linking on-chain identity to Discord presence.  
+- **Scalability** — Works across small and large communities alike, supporting many validators and delegators.  
 
-## 🧾 Slash Commands
-```
-/start-again-delegator — Restart delegator verification
-/start-again-validator — Restart validator verification
-/cleanup-inactive-validators — Remove validator roles from inactive users (on-chain check)
-/cleanup-inactive-delegators — Remove delegator roles from inactive users (on-chain check)
-```
+---
 
-## 📞 Support & Contributions
+## Example Use Cases
 
-Pull requests are welcome!
-For major changes, please open an issue first to discuss your proposal.
+1. **A validator is suspended**  
+   The bot updates the validator’s role in Discord, marks the suspension in the database, and notifies delegators so they can react promptly.
+
+2. **A delegator changes validator pools**  
+   The bot detects the change, updates their stored delegation target, and informs the delegator.
+
+3. **A new developer joins**  
+   After GitHub verification, the bot grants them the *Developer* role and links their account.
+
+4. **A member leaves the Discord server**  
+   Their records are automatically cleaned from the database, ensuring data consistency.
+
+---
+
+## High-Level Architecture
+
+- **Discord Client** — Listens for commands, role updates, and user interactions.  
+- **Express Server** — Provides API endpoints and handles OAuth-based integrations.  
+- **Database Layer** — PostgreSQL stores verification data, preferences, and validator/delegator mappings.  
+- **Blockchain Integration** — Queries Concordium chain data to ensure real-time accuracy.  
+- **Automation Scripts** — Handle migration, imports, and backfilling legacy records.  
+
+---
+
+This bot is built to serve as a **bridge between Discord communities and the Concordium blockchain**, offering transparency, automation, and reliability.  
+It enables users to confidently engage in community activities while ensuring their on-chain status is always reflected within the server.  
+
+By combining real-time monitoring, automated notifications, and verification, the bot enhances trust, reduces friction, and helps keep the community organized and informed.
+
+---
