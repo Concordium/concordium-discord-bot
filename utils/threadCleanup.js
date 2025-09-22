@@ -10,7 +10,6 @@
  *   - Removes associated user state from `stateMap` using the userId parsed from the thread name.
  * - Interval cadence controlled by `THREAD_CLEANUP_INTERVAL_MS` (default 60s).
  */
-
 const { ChannelType } = require("discord.js");
 
 const INACTIVE_THREAD_CHECK_INTERVAL = Number(process.env.THREAD_CLEANUP_INTERVAL_MS || 60000);

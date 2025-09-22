@@ -15,21 +15,18 @@
  *   • Uses validator_delegators mapping to DM validators about join/leave/stake-change events.
  * - Configurable logging/filtering via TXL_* env flags; TLS via GRPC_TLS; CLI path via CONCORDIUM_CLIENT_PATH.
  */
-
 const { execFile } = require("child_process");
 let ConcordiumGRPCNodeClient, credentials;
 const vdel = require("./validatorDelegators");
 
 const alerts = require("./alerts");
 const LOG_TX = (process.env.TXL_LOG_TX || "").toLowerCase() === "true" || process.env.TXL_LOG_TX === "1";
-// gRPC node config
 const GRPC_HOST = process.env.GRPC_IP || "127.0.0.1";
 const GRPC_PORT = Number(process.env.GRPC_PORT || 20000);
 const USE_TLS =
   (process.env.GRPC_TLS || "").toLowerCase() === "true" ||
   process.env.GRPC_TLS === "1";
 
-// Optional: special events logging
 const LOG_SPECIAL =
   (process.env.TXL_LOG_SPECIAL || "").toLowerCase() === "true" ||
   process.env.TXL_LOG_SPECIAL === "1";
@@ -809,7 +806,6 @@ async function handleTxAlerts(events, { txHash, blockHash, timestampIso }) {
                   || extractAccountString(ev?.address)
                   || extractAccountString(ev?.owner);
       if (validatorId != null) {
-        // 1) Collect impacted delegators BEFORE DB updates flip them to 'passive'
         let impactedDiscordIds = [];
         try {
           impactedDiscordIds = await alerts.getDelegatorDiscordIdsByValidator(String(validatorId));
@@ -817,7 +813,6 @@ async function handleTxAlerts(events, { txHash, blockHash, timestampIso }) {
           if (DEBUG) console.warn("[alerts] getDelegatorDiscordIdsByValidator failed:", e?.message || e);
         }
 
-        // 2) Per-delegator update + DM (passive switch)
         try {
           await alerts.handleValidatorRemoved({
             validatorId,
@@ -829,14 +824,13 @@ async function handleTxAlerts(events, { txHash, blockHash, timestampIso }) {
           if (DEBUG) console.warn("[alerts] handleValidatorRemoved failed:", e?.message || e);
         }
 
-        // 3) Global broadcast, excluding impacted delegators (and owners are excluded inside the function)
         try {
           await alerts.handleNetworkValidatorRemoved({
             validatorId,
             account: account ? String(account) : null,
             txHash,
             blockHash,
-            excludeDiscordIds: impactedDiscordIds, // << key change
+            excludeDiscordIds: impactedDiscordIds,
           });
         } catch (e) {
           if (DEBUG) console.warn("[alerts] handleNetworkValidatorRemoved failed:", e?.message || e);
@@ -1081,7 +1075,6 @@ async function processBlock(grpcClient, blockHash, height) {
 
       const events = getItemEvents(item);
       if (txHash) {
-        // TX log controlled by TXL_LOG_TX (boolean in LOG_TX)
         if (LOG_TX) {
           if (memo.text) {
             console.log(`↪︎ [grpc] tx ${txHash} memo="${memo.text}" (hex:${memo.hex}) in block ${hash}`);

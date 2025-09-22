@@ -12,7 +12,6 @@
  *   • Validator self-stake changes (increase/decrease) and fan-out to delegators.
  * - Includes composable line helpers (accountLine, txLinkLine, blockLine) used in templates.
  */
-
 const { formatPercent } = require("./format");
 const CCDSCAN_BASE_URL = process.env.CCDSCAN_BASE_URL || "https://ccdscan.io";
 
@@ -206,7 +205,6 @@ const MSGS = {
   // ===== alerts =====
 
   delegatorRoleRevokedBelowMinimum: (mention, wallet, minCcd, currentCcd, txHash, blockHash) => {
-    // Build a clear notice with links and context
     const body =
       `⚠️ **Delegator role removed**\n` +
       `We detected that your delegation decreased below the required minimum of **${Number(minCcd).toLocaleString("en-US")} CCD** for the Delegator role.\n` +
@@ -219,7 +217,6 @@ const MSGS = {
     return dmPayload(mention, body);
   },  
   
-  // New delegator joined a pool (validator owners fan-out)
   newDelegatorJoined: (mention, poolId, delegatorAccount, stakeCCD, txHash) => {
     const body =
       `🆕 **New delegator joined your pool #${poolId}**\n` +
@@ -229,7 +226,6 @@ const MSGS = {
     return dmPayload(mention, body);
   },
 
-  // ===== network-wide validator appearance/removal =====
   networkNewValidator: (
     mention,
     validatorId,
@@ -287,7 +283,6 @@ const MSGS = {
     return dmPayload(mention, body);
   }, 
   
-  // Own delegation stake changed
   delegatorStakeIncreased: (mention, newStakeCCD, txHash, blockHash) => {
     const body =
       `🔼 **Stake increased!**\n` +
@@ -308,7 +303,6 @@ const MSGS = {
     return dmPayload(mention, body);
   },
 
-  // Validator self-stake changes (to validator owners)
   validatorSelfStakeIncreased: (mention, newStakeCCD, _account, _timestampIso, txHash, blockHash) => {
     const body =
       `🔼 **You increased your stake!**\n` +
@@ -333,7 +327,6 @@ validatorSelfStakeDecreased: (mention, newStakeCCD, cooldowns, txHash, blockHash
   return dmPayload(mention, body);
 },
 
-  // Fan-out to delegators of a validator who changed self-stake
   delegatorValidatorSelfStakeIncreased: (mention, validatorId, newStakeCCD, _timestampIso, txHash, blockHash) => {
     const body =
       `🔼 **The validator you delegate to (#${validatorId}) increased their stake!**\n` +
@@ -349,7 +342,6 @@ validatorSelfStakeDecreased: (mention, newStakeCCD, cooldowns, txHash, blockHash
     return dmPayload(mention, body);
   },
 
-  // Validator lifecycle + pool/target/commission changes
   validatorReactivated: (mention, wallet) => {
     const body =
       `🎉 Great news! Your validator (Address: \`${wallet}\`) is now *active* again.\n` +

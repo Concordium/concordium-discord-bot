@@ -5,7 +5,6 @@
  * "ECONNREFUSED", "connection timed out") and returns a boolean via isGrpcUnavailable().
  * Export: { isGrpcUnavailable }.
  */
-
 function isGrpcUnavailable(errorText) {
     if (!errorText) return false;
     const patterns = [

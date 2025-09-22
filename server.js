@@ -12,7 +12,6 @@
  * - Starts the HTTP server when run directly; exports { app, discordClient } for reuse.
  * - Includes basic error handling for server events and process-level exceptions.
  */
-
 require("dotenv").config();
 
 const express = require("express");

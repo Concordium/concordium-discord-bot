@@ -62,11 +62,6 @@ function setAlertsClient(client) {
   if (ALERTS_DEBUG) console.log("📌 [alerts] client set");
 }
 
-// ───────────────────────────────
-// Helpers: CLI stake/cooldown readers + formatting
-// ───────────────────────────────
-
-/** Read "Staked amount: XXX CCD" from `account show` (works for validator self-stake). */
 async function getSelfStakeCCD_CLI(account) {
   if (!account) return null;
   const cmd =
@@ -86,7 +81,6 @@ async function getSelfStakeCCD_CLI(account) {
   }
 }
 
-/** Read delegator stake (only if account is delegating). */
 async function getDelegatedStakeCCD_CLI(account) {
   if (!account) return null;
 
@@ -567,7 +561,6 @@ async function handleCommissionUpdate({ validatorId, bakingRewardCommission, tra
   }
 }
 
-// ——— formatting utils (used across alerts) ———
 function normPaydayCCD(x) {
   const n = Number(x);
   if (!Number.isFinite(n)) return 0;
@@ -738,9 +731,6 @@ async function notifyStatus(validatorId, status = {}) {
   }
 }
 
-// ───────────────────────────────
-// Validator self-stake decreased — now uses messages.js template (with ALL cooldowns)
-// ───────────────────────────────
 async function handleValidatorStakeDecreased({
   validatorId,
   account,
@@ -754,7 +744,6 @@ async function handleValidatorStakeDecreased({
   const vidNum = Number(validatorId);
   const vidStr = String(validatorId);
 
-  // Exact stake via CLI; fallback to best-effort conversion
   let stakeCCD = await getSelfStakeCCD_CLI(account);
   if (!Number.isFinite(stakeCCD)) {
     stakeCCD = toCCD_bestEffort(newStakeMicro);
@@ -771,15 +760,13 @@ async function handleValidatorStakeDecreased({
     [vidStr]
   );
 
-  // Pull ALL active cooldowns for the validator account
   let cooldowns = [];
   try {
-    cooldowns = await getCooldowns(account); // [{ amountCCD, when }, ...]
+    cooldowns = await getCooldowns(account);
   } catch (_) {
     cooldowns = [];
   }
 
-  // Notify validator owners using centralized template
   for (const r of owners.rows) {
     const uid = r.discord_id;
     const mention = `<@${uid}>`;
@@ -796,7 +783,6 @@ async function handleValidatorStakeDecreased({
     );
   }
 
-  // Notify delegators of that validator (message unchanged)
   for (const r of delegators.rows) {
     const uid = r.discord_id;
     const mention = `<@${uid}>`;
@@ -813,7 +799,6 @@ async function handleValidatorStakeDecreased({
   }
 }
 
-// Broadcast to all verified users (Validators + Delegators)
 async function broadcastToAllVerified(payloadBuilder) {
   const resV = await pool.query(
     "SELECT DISTINCT discord_id FROM verifications WHERE role_type='Validator'"
@@ -863,17 +848,15 @@ async function handleNetworkValidatorAdded({
   );
 }
 
-// Broadcast: a validator was removed from the network (exclude impacted users).
 async function handleNetworkValidatorRemoved({
   validatorId,
   account,
   txHash,
   blockHash,
-  excludeDiscordIds = [], // NEW: list of user IDs to skip
+  excludeDiscordIds = [],
 }) {
   const skip = new Set(excludeDiscordIds.map(String));
 
-  // Also exclude the removed validator's owner(s) from the generic "different validator" message.
   try {
     const owners = await pool.query(
       "SELECT DISTINCT discord_id FROM verifications WHERE role_type='Validator' AND validator_id=$1",
@@ -884,7 +867,6 @@ async function handleNetworkValidatorRemoved({
     if (ALERTS_DEBUG) console.warn("[alerts] handleNetworkValidatorRemoved owners lookup failed:", e?.message || e);
   }
 
-  // Collect all verified users (validators + delegators), then filter out skip set.
   let recipients = [];
   try {
     const v = await pool.query("SELECT DISTINCT discord_id FROM verifications WHERE role_type='Validator'");
@@ -907,9 +889,6 @@ async function handleNetworkValidatorRemoved({
   }
 }
 
-// ───────────────────────────────
-// Validator self-stake increased — using message templates from MSGS
-// ───────────────────────────────
 async function handleValidatorStakeIncreased({
   validatorId, account, newStakeMicro, txHash, blockHash, timestampIso
 }) {
@@ -928,14 +907,12 @@ async function handleValidatorStakeIncreased({
     [vidStr]
   );
 
-  // Exact stake via CLI; fallback to best-effort conversion
   let stakeCCD = await getSelfStakeCCD_CLI(account);
   if (!Number.isFinite(stakeCCD)) {
     stakeCCD = toCCD_bestEffort(newStakeMicro);
   }
   const newStakeCCD = fmtCCD2(stakeCCD, 2);
 
-  // Validator owners
   for (const r of owners.rows) {
     const uid = r.discord_id;
     const mention = `<@${uid}>`;
@@ -952,7 +929,6 @@ async function handleValidatorStakeIncreased({
     );
   }
 
-  // Delegators of that validator
   for (const r of delegators.rows) {
     const uid = r.discord_id;
     const mention = `<@${uid}>`;

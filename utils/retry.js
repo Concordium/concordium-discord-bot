@@ -6,25 +6,12 @@
  * - runCommandWithRetry(cmd, retries=2, delayMs=600): executes a shell command via child_process.exec with retry; resolves stdout or rejects on error/stderr.
  * Intended to harden CLI/gRPC/network calls against transient failures.
  */
-
 const { exec } = require("child_process");
 
-/**
- * Simple async delay.
- * @param {number} ms - Delay in milliseconds.
- * @returns {Promise<void>}
- */
 function delay(ms) {
     return new Promise(resolve => setTimeout(resolve, ms));
 }
 
-/**
- * Universal async-retry utility for CLI/gRPC or other async calls.
- * @param {() => Promise<any>} fn
- * @param {number} retries
- * @param {number} delayMs
- * @returns {Promise<any>}
- */
 async function retryAsync(fn, retries = 2, delayMs = 600) {
     let attempt = 0;
     while (attempt <= retries) {
@@ -39,13 +26,6 @@ async function retryAsync(fn, retries = 2, delayMs = 600) {
     }
 }
 
-/**
- * Universal CLI exec with retry for async/await style.
- * @param {string} cmd
- * @param {number} retries
- * @param {number} delayMs
- * @returns {Promise<string>}
- */
 async function runCommandWithRetry(cmd, retries = 2, delayMs = 600) {
     return await retryAsync(() => new Promise((resolve, reject) => {
         exec(cmd, (err, stdout, stderr) => {

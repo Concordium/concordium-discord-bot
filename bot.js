@@ -14,7 +14,6 @@
  * - Handles member leave events to perform cleanup logic.
  * - Logs bot in using DISCORD_BOT_TOKEN.
  */
-
 require("dotenv").config();
 
 const {
@@ -79,16 +78,11 @@ const client = new Client({
   ]
 });
 
-// env → boolean
 function toBool(v) {
   const s = String(v ?? "").trim().toLowerCase();
   return s === "1" || s === "true" || s === "yes" || s === "on";
 }
 
-/**
- * Send a message to the moderators' log channel, if configured.
- * Safe to call from anywhere; fails quietly if channel is missing or not text-based.
- */
 async function sendModLog(content) {
   if (!MOD_LOGS_CHANNEL_ID) return;
   try {
@@ -103,9 +97,6 @@ async function sendModLog(content) {
   }
 }
 
-/**
- * Check if a member already has a role by explicit ID (from ENV) or by name (regex).
- */
 function hasRoleByEnvOrName(member, roleIdEnv, nameRegex) {
   if (!member) return false;
   if (roleIdEnv && member.roles.cache.has(roleIdEnv)) return true;
@@ -237,14 +228,12 @@ client.on("interactionCreate", async (interaction) => {
       ? await interaction.guild.members.fetch(discordId).catch(() => null)
       : null;
 
-    // Compose actor and location for mod logs
     const who = `<@${discordId}> (${interaction.user.tag})`;
     const where =
       interaction.channel && interaction.channel.id
         ? ` in <#${interaction.channel.id}>`
         : "";
 
-    // Optional explicit role IDs from ENV; fallback to name regex.
     const DEV_ROLE_ID        = process.env.DEV_ROLE_ID;
     const VALIDATOR_ROLE_ID  = process.env.VALIDATOR_ROLE_ID;
     const DELEGATOR_ROLE_ID  = process.env.DELEGATOR_ROLE_ID;
@@ -277,7 +266,6 @@ client.on("interactionCreate", async (interaction) => {
   if (interaction.isChatInputCommand()) {
     console.log(`Received command: /${interaction.commandName}`);
 
-    // Compose actor and location for mod logs
     const who = `<@${interaction.user.id}> (${interaction.user.tag})`;
     const where =
       interaction.channel && interaction.channel.id

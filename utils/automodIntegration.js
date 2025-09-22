@@ -6,7 +6,6 @@
  * - Uses axios for HTTP calls and reads env: DISCORD_GUILD_ID, DISCORD_BOT_TOKEN, AUTOMOD_RULE_ID.
  * - Idempotent (checks existing exemptions), logs results, and handles API errors gracefully.
  */
-
 const axios = require("axios");
 const { ChannelType } = require("discord.js");
 
@@ -17,7 +16,6 @@ const AUTOMOD_RULE_ID = process.env.AUTOMOD_RULE_ID;
 const ticketTopicPattern = /Ticket/i;
 
 module.exports = function setupAutoModIntegration(client) {
-    // Handle channel creation
     client.on("channelCreate", async (channel) => {
         if (channel.type !== ChannelType.GuildText) return;
 
@@ -54,7 +52,6 @@ module.exports = function setupAutoModIntegration(client) {
         }
     });
 
-    // Handle channel deletion
     client.on("channelDelete", async (channel) => {
         if (channel.type !== ChannelType.GuildText) return;
 

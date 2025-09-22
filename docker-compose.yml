@@ -14,11 +14,10 @@ services:
     ports:
       - "3000:3000"
     environment:
-      # CSV import on startup
       IMPORT_VERIFICATIONS_CSV: /seed/verifications_v1.csv
-      IMPORT_RUN_ON_EMPTY: "1"   # import only if the verifications table is empty
+      IMPORT_RUN_ON_EMPTY: "1"
     volumes:
-      - ./seed:/seed:ro          # place your CSV at ./seed/verifications_v1.csv
+      - ./seed:/seed:ro
 
   db:
     image: postgres:15

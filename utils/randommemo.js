@@ -5,7 +5,6 @@
  * - Returns: string of digits suitable for lightweight tags/identifiers.
  * - Export: generateRandomMemo()
  */
-
 function generateRandomMemo() {
     const length = Math.floor(Math.random() * 6) + 5;
     let result = '';

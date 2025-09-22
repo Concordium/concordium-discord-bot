@@ -4,6 +4,10 @@ npm-debug.log
 
 # Environment files
 .env
+.env.template
+
+# database from discord bot V1
+/seed/verifications_v1.csv
 
 # OS / Editor junk
 .DS_Store
