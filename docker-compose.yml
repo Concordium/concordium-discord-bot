@@ -5,11 +5,20 @@ services:
     build: .
     container_name: discord-bot
     env_file: .env
-    depends_on:
-      - db
     restart: always
+    depends_on:
+      db:
+        condition: service_healthy
     networks:
       - botnet
+    ports:
+      - "3000:3000"
+    environment:
+      # CSV import on startup
+      IMPORT_VERIFICATIONS_CSV: /seed/verifications_v1.csv
+      IMPORT_RUN_ON_EMPTY: "1"   # import only if the verifications table is empty
+    volumes:
+      - ./seed:/seed:ro          # place your CSV at ./seed/verifications_v1.csv
 
   db:
     image: postgres:15
@@ -22,6 +31,11 @@ services:
     volumes:
       - postgres-data:/var/lib/postgresql/data
       - ./init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
     networks:
       - botnet
 
