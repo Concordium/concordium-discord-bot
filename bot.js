@@ -3,7 +3,7 @@
  * Responsibilities:
  * - Creates a Discord.js Client with required intents (guilds, messages, moderation, members, content).
  * - Registers guild slash commands:
- *   /start-again-validator, /start-again-delegator, /receive-notifications (with on/off choice).
+ *   /start-again-validator, /start-again-delegator, /receive-notifications (with on/off choice), /reconcile_roles (mods only).
  * - Handles `!setup` to post a role verification select menu and routes selections to:
  *   - Developer verification (GitHub-based),
  *   - Validator verification (on-chain transaction),
@@ -22,7 +22,8 @@ const {
   StringSelectMenuBuilder,
   ActionRowBuilder,
   REST,
-  Routes
+  Routes,
+  MessageFlags,
 } = require("discord.js");
 
 const handleDevVerification = require("./roles/devVerification");
@@ -42,6 +43,7 @@ const { handleMemberLeave } = require("./modules/member-leave-handler");
 const { setAlertsClient } = require("./modules/alerts");
 const { handleReceiveNotifications } = require("./modules/notificationPrefs");
 const { runBackfillFromCsv, runPostImportEnrichment } = require("./scripts/backfill");
+const { reconcileRoles } = require("./modules/roleReconciler");
 
 let _txloggerMod = null;
 
@@ -153,6 +155,10 @@ client.once("clientReady", async () => {
           ]
         }
       ]
+    },
+    {
+      name: "reconcile_roles",
+      description: "Fix Discord roles & DB after downtime (mods only)"
     }
   ];
 
@@ -276,11 +282,43 @@ client.on("interactionCreate", async (interaction) => {
       case "start-again-validator":
         await sendModLog(`🔁 Restart requested: **Validator** by ${who}${where}`);
         return restartValidatorFlow(interaction, client);
+
       case "start-again-delegator":
         await sendModLog(`🔁 Restart requested: **Delegator** by ${who}${where}`);
         return restartDelegatorFlow(interaction, client);
+
       case "receive-notifications":
         return handleReceiveNotifications(interaction);
+
+      case "reconcile_roles": {
+        const member = interaction.guild
+          ? await interaction.guild.members.fetch(interaction.user.id).catch(() => null)
+          : null;
+
+        if (!member || !member.roles.cache.has(TEAM_ROLE_ID)) {
+          return interaction.reply({
+            content: "❌ You do not have permission to use this command.",
+            flags: MessageFlags.Ephemeral,
+          });
+        }
+
+        await interaction.reply({
+          content: "🔧 Reconciling roles & DB…",
+          flags: MessageFlags.Ephemeral,
+        });
+        await sendModLog(`🧰 Reconcile requested by ${who}${where}`);
+
+        try {
+          await reconcileRoles(client, { deleteRows: true, debug: true });
+          await interaction.editReply("✅ Reconcile finished.");
+          await sendModLog(`✅ Reconcile finished (requested by ${who})`);
+        } catch (e) {
+          console.error("[reconcile] handler error:", e);
+          try { await interaction.editReply(`❌ Reconcile failed: ${e?.message || e}`); } catch {}
+          await sendModLog(`❌ Reconcile failed (requested by ${who}): ${e?.message || e}`);
+        }
+        return;
+      }
     }
   }
 });

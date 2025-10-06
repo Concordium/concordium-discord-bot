@@ -73,18 +73,27 @@ async function refreshValidatorDelegators(validatorId) {
   const client = await getGrpc();
 
   const pairs = [];
-  for await (const d of client.getPoolDelegators(vid)) {
-    const acc = extractAccount(d);
-    if (!acc) continue;
+  let listedOk = false;
 
-    try {
-      const info = await client.getAccountInfo(acc);
-      const ai = info?.accountInfo ?? info;
-      const delegatorId = toNum(ai?.accountIndex ?? ai?.index ?? ai?.accountIndex?.value);
-      if (delegatorId != null) {
-        pairs.push({ delegatorId, account: stripQuotes(acc) });
+  try {
+    for await (const d of client.getPoolDelegators(vid)) {
+      const acc = extractAccount(d);
+      if (!acc) continue;
+
+      try {
+        const info = await client.getAccountInfo(acc);
+        const ai = info?.accountInfo ?? info;
+        const delegatorId = toNum(ai?.accountIndex ?? ai?.index ?? ai?.accountIndex?.value);
+        if (delegatorId != null) {
+          pairs.push({ delegatorId, account: stripQuotes(acc) });
+        }
+      } catch {
       }
-    } catch {
+    }
+    listedOk = true;
+  } catch (e) {
+    if (process.env.BACKFILL_DEBUG === "1") {
+      console.warn(`[vdel] list failed for #${vid}: ${e?.message || e}`);
     }
   }
 
@@ -94,12 +103,14 @@ async function refreshValidatorDelegators(validatorId) {
   try {
     await pg.query("BEGIN");
 
-    await pg.query(
-      `DELETE FROM validator_delegators
-        WHERE validator_id = $1
-          AND NOT (delegator_id = ANY($2::int[]))`,
-      [vid, currentIds]
-    );
+    if (listedOk) {
+      await pg.query(
+        `DELETE FROM validator_delegators
+          WHERE validator_id = $1
+            AND NOT (delegator_id = ANY($2::int[]))`,
+        [vid, currentIds]
+      );
+    }
 
     for (const { delegatorId, account } of pairs) {
       await pg.query(
