@@ -13,9 +13,6 @@ services:
       - botnet
     ports:
       - "3000:3000"
-    environment:
-      IMPORT_VERIFICATIONS_CSV: /seed/verifications_v1.csv
-      IMPORT_RUN_ON_EMPTY: "1"
     volumes:
       - ./seed:/seed:ro
 

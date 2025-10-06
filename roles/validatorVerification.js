@@ -413,7 +413,7 @@ async function handleValidatorVerification(interaction, discordId, client) {
       if (existingThread) {
         await interaction.reply({
           content: MSGS.threadExists(GUILD_ID, existingThread.id),
-          ephemeral: true
+          flags: MessageFlags.Ephemeral
         });
         return;
       } else {
