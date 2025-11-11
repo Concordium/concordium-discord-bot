@@ -3,16 +3,12 @@
  * Handles **Developer** role verification via GitHub OAuth.
  * Responsibilities:
  * - Starts OAuth.
- * - Sends an ephemeral Discord message with requirements and a GitHub auth link.
+ * - Sends an ephemeral Discord message with a GitHub auth link.
  * - Callback validation:
- *   • GitHub account age ≥ 3 months,
- *   • ≥ 1 public repository,
- *   • ≥ 5 authored commits across repos,
- *   • Stars required Concordium repos,
- *   • Prevents reuse of the same GitHub profile (duplicate check).
+ *   • Checks for duplicate GitHub profile (unique usage).
  * - On success: assigns <@&DEV_ROLE_ID>, logs to moderators channel, and saves a row in Postgres (`verifications`).
- * - Exports: default handler, `processGithubCallback`, `saveDeveloperVerification`, `checkDuplicateGithubProfile`.
  */
+
 const axios = require("axios");
 const crypto = require("crypto");
 const { MessageFlags } = require("discord.js");
@@ -35,21 +31,11 @@ const pool = new Pool({
   port: process.env.PG_PORT,
 });
 
-const REQUIRED_REPOS = [
-  "Concordium/concordium-dapp-examples",
-  "Concordium/concordium-rust-smart-contracts",
-  "Concordium/concordium-node",
-  "Concordium/concordium-rust-sdk",
-  "Concordium/concordium-node-sdk-js",
-];
-
 async function postSaveStateWithRetry(state, discordId) {
   const candidates = [];
 
   if (INTERNAL_HTTP_BASE) candidates.push(INTERNAL_HTTP_BASE);
-
   candidates.push("http://127.0.0.1:3000", "http://localhost:3000");
-
   if (SERVER_URL && /^https?:\/\//i.test(SERVER_URL)) {
     candidates.push(SERVER_URL);
   }
@@ -91,7 +77,6 @@ module.exports = async function handleDevVerification(interaction, discordId, cl
     }
 
     const state = crypto.randomBytes(16).toString("hex");
-
     await postSaveStateWithRetry(state, discordId);
 
     const authUrl =
@@ -104,19 +89,8 @@ module.exports = async function handleDevVerification(interaction, discordId, cl
     await interaction.reply({
       content: `**<@&${DEV_ROLE_ID}> Role Verification**
 
-Before proceeding, please make sure you meet the following requirements:
-
-✅ Your GitHub account must be at least 3 months old  
-✅ You must have at least 1 public repository  
-✅ You must have at least 5 commits  
-_(If your commits were made in a forked repository, make sure that the fork is present in your profile under your repositories. If you delete the fork, your commits will not be counted.)_
-✅ You must star the following repositories:  
-
-[**Concordium DApp Examples**](<https://github.com/Concordium/concordium-dapp-examples>)  
-[**Concordium Rust Smart Contracts**](<https://github.com/Concordium/concordium-rust-smart-contracts>)  
-[**Concordium Node**](<https://github.com/Concordium/concordium-node>)  
-[**Concordium Rust SDK**](<https://github.com/Concordium/concordium-rust-sdk>)  
-[**Concordium Node SDK (JS)**](<https://github.com/Concordium/concordium-node-sdk-js>)
+Click the link below to verify your GitHub account and receive the Developer role.  
+Please make sure you use your own GitHub account.
 
 🔗 **[Click Here to Verify](<${authUrl}>)**`,
       flags: MessageFlags.Ephemeral,
@@ -133,84 +107,26 @@ _(If your commits were made in a forked repository, make sure that the fork is p
 };
 
 module.exports.processGithubCallback = async function ({ accessToken, discordId, discordClient }) {
-  const errors = [];
   try {
+    // Fetch GitHub user profile
     const userResponse = await axios.get("https://api.github.com/user", {
       headers: { Authorization: `Bearer ${accessToken}` },
     });
 
-    const createdAt = new Date(userResponse.data.created_at);
-    const now = new Date();
-    const monthsDiff =
-      (now.getFullYear() - createdAt.getFullYear()) * 12 +
-      (now.getMonth() - createdAt.getMonth());
-    if (monthsDiff < 3) {
-      errors.push(
-        `Your GitHub account is too new (${monthsDiff} months old). It must be at least 3 months old.`
-      );
-    }
-
-    const reposResponse = await axios.get(userResponse.data.repos_url, {
-      headers: { Authorization: `Bearer ${accessToken}` },
-    });
-    if (reposResponse.data.length < 1) {
-      errors.push("You must have at least 1 public repository.");
-    }
-
-    let totalCommits = 0;
-    for (const repo of reposResponse.data) {
-      try {
-        const commitsResponse = await axios.get(
-          `https://api.github.com/repos/${userResponse.data.login}/${repo.name}/commits`,
-          { headers: { Authorization: `Bearer ${accessToken}` } }
-        );
-        const ownCommits = commitsResponse.data.filter(
-          (commit) => commit?.author?.login === userResponse.data.login
-        );
-        totalCommits += ownCommits.length;
-        if (totalCommits >= 5) break;
-      } catch (error) {
-        console.log(`Skipping repo ${repo.name}: ${error.message}`);
-      }
-    }
-    if (totalCommits < 5) {
-      errors.push(`You have only ${totalCommits} commits. Minimum required is 5.`);
-    }
-
-    const missingStars = [];
-    for (const repo of REQUIRED_REPOS) {
-      try {
-        await axios.get(`https://api.github.com/user/starred/${repo}`, {
-          headers: { Authorization: `Bearer ${accessToken}` },
-        });
-      } catch (error) {
-        if (error.response && error.response.status === 404) {
-          missingStars.push(
-            `<a href="https://github.com/${repo}" target="_blank">${repo}</a>`
-          );
-        }
-      }
-    }
-    if (missingStars.length > 0) {
-      errors.push(
-        `You must star the following repositories: ${missingStars.join(", ")}`
-      );
-    }
-
     const githubProfileUrl = userResponse.data.html_url;
-    const isDuplicate = await module.exports.checkDuplicateGithubProfile(
-      githubProfileUrl
-    );
+
+    // Check for duplicate usage of GitHub profile
+    const isDuplicate = await module.exports.checkDuplicateGithubProfile(githubProfileUrl);
     if (isDuplicate) {
-      errors.push(
-        `The GitHub profile <a href="${githubProfileUrl}" target="_blank">${githubProfileUrl}</a> has already been used to verify another Discord account. Please use a different GitHub account.`
-      );
+      return {
+        success: false,
+        errors: [
+          `The GitHub profile <a href="${githubProfileUrl}" target="_blank">${githubProfileUrl}</a> has already been used to verify another Discord account. Please use a different GitHub account.`,
+        ],
+      };
     }
 
-    if (errors.length > 0) {
-      return { success: false, errors };
-    }
-
+    // Assign the Developer role
     try {
       const guild = await discordClient.guilds.fetch(GUILD_ID);
       const member = await guild.members.fetch(discordId);
@@ -247,6 +163,7 @@ module.exports.processGithubCallback = async function ({ accessToken, discordId,
       };
     }
 
+    // Save verification data
     await module.exports.saveDeveloperVerification(discordId, githubProfileUrl);
 
     return { success: true };
