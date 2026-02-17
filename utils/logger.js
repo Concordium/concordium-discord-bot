@@ -21,7 +21,18 @@ function fmt(level, scope) {
 
 function log(level, scope, ...args) {
   if (!shouldLog(level)) return;
-  console.log(fmt(level, scope), ...args);
+
+  const prefix = fmt(level, scope);
+
+  if (level === "error") {
+    console.error(prefix, ...args);
+  } else if (level === "warn") {
+    console.warn(prefix, ...args);
+  } else if (level === "debug") {
+    console.debug(prefix, ...args);
+  } else {
+    console.log(prefix, ...args);
+  }
 }
 
 module.exports = {
