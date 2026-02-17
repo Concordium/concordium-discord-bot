@@ -77,6 +77,8 @@ const pool = new Pool({
 
 const delegatorVerificationState = new Map();
 
+const logger = require("../utils/logger");
+
 let wrongMemoNotifierInitialized = false;
 function ensureWrongMemoNotifier(client) {
   if (wrongMemoNotifierInitialized) return;
@@ -208,7 +210,7 @@ async function ensureDelegatorRemovalWatcher(client) {
 
         await new Promise((r) => setTimeout(r, 1000));
       } catch (e) {
-        console.error(`[delegator-watch] error: ${e?.message || e}. Reconnecting in 1s...`);
+        logger.debug("[delegator-watch]", `error: ${e?.message || e}. Reconnecting in 1s...`);
         await new Promise((r) => setTimeout(r, 1000));
       }
     }

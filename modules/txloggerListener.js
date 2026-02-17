@@ -74,6 +74,8 @@ const validatorWaiters = new Map();
 let validatorWrongMemoNotifier = null;
 let validatorExpiredNotifier = null;
 
+const logger = require("../utils/logger");
+
 function normAddr(a) {
   if (!a) return "";
   return String(a).trim().toLowerCase();
@@ -1198,7 +1200,7 @@ async function startTxLoggerListener() {
 
       await new Promise((r) => setTimeout(r, 1000));
     } catch (err) {
-      console.error(`❌ [grpc] listener error: ${err?.message || err}. Reconnecting in 1000ms...`);
+      logger.debug("[grpc]", `listener error: ${err?.message || err}. Reconnecting in 1000ms...`);
       await new Promise((r) => setTimeout(r, 1000));
     }
   }
