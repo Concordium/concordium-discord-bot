@@ -26,6 +26,7 @@ const { generateRandomMemo } = require("../utils/randommemo");
 const { startInactiveThreadsCleanup } = require("../utils/threadCleanup");
 const { runCommandWithRetry } = require("../utils/retry");
 const { refreshValidatorDelegators } = require("../modules/validatorDelegators");
+const logger = require("../utils/logger");
 
 let _txl = null;
 async function _getTxl() {
@@ -227,7 +228,7 @@ async function ensureValidatorRemovalWatcher(client) {
 
         await new Promise((r) => setTimeout(r, 1000));
       } catch (e) {
-        console.error(`[validator-watch] error: ${e?.message || e}. Reconnecting in 1s...`);
+        logger.debug("[validator-watch]", `error: ${e?.message || e}. Reconnecting in 1s...`);
         await new Promise((r) => setTimeout(r, 1000));
       }
     }
