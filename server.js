@@ -30,6 +30,22 @@ const REDIRECT_URI = process.env.REDIRECT_URI;
 
 const authRequests = new Map();
 
+// Shared secret authenticating the internal /save-state endpoint. Without it,
+// anyone who can reach the port could overwrite the OAuth state -> discordId
+// mapping and hijack another user's verification flow.
+const INTERNAL_API_SECRET = process.env.INTERNAL_API_SECRET;
+
+// OAuth state tokens must be short-lived: stale entries would allow replays of
+// old verification links.
+const STATE_TTL_MS = Number(process.env.STATE_TTL_MS || 10 * 60 * 1000);
+
+function pruneExpiredStates(now = Date.now()) {
+  for (const [state, entry] of authRequests) {
+    if (now - entry.createdAt > STATE_TTL_MS) authRequests.delete(state);
+  }
+}
+setInterval(() => pruneExpiredStates(), STATE_TTL_MS).unref?.();
+
 const discordClient = new Client({
   intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMembers],
 });
@@ -48,11 +64,38 @@ app.get("/healthz", (_req, res) => {
 
 app.post("/save-state", (req, res) => {
   try {
+    // Require the shared internal secret when configured, so this endpoint cannot
+    // be abused to fixate an OAuth state onto an arbitrary Discord account.
+    if (INTERNAL_API_SECRET) {
+      const provided = req.get("x-internal-secret");
+      if (provided !== INTERNAL_API_SECRET) {
+        return res.status(401).json({ success: false, error: "Unauthorized" });
+      }
+    } else {
+      console.warn(
+        "WARNING: INTERNAL_API_SECRET is not set; /save-state is unauthenticated."
+      );
+    }
+
     const { state, discordId } = req.body || {};
-    if (!state || !discordId) {
+    // Basic format validation: the state is generated server-side as 32 hex chars
+    // and the discordId is a snowflake (numeric string). Reject anything else to
+    // keep the map free of attacker-chosen junk.
+    if (
+      typeof state !== "string" ||
+      !/^[a-f0-9]{32}$/.test(state) ||
+      typeof discordId !== "string" ||
+      !/^\d{5,25}$/.test(discordId)
+    ) {
       return res.status(400).json({ success: false, error: "Invalid request" });
     }
-    authRequests.set(state, discordId);
+    pruneExpiredStates();
+    // Do not allow overwriting a live state token: a state maps to exactly one
+    // Discord user for its whole lifetime.
+    if (authRequests.has(state)) {
+      return res.status(409).json({ success: false, error: "State already in use" });
+    }
+    authRequests.set(state, { discordId, createdAt: Date.now() });
     return res.json({ success: true });
   } catch (e) {
     console.error("save-state error:", e);
@@ -94,8 +137,17 @@ app.get("/callback", async (req, res) => {
       `);
     }
 
-    const discordId = authRequests.get(state);
+    const entry = authRequests.get(state);
+    // Single-use: consume the state immediately so a leaked link cannot be replayed.
     authRequests.delete(state);
+    // Reject expired state tokens.
+    if (Date.now() - entry.createdAt > STATE_TTL_MS) {
+      return res.send(`
+        <h1 style="font-size:2.2em;">Verification session expired!</h1>
+        <p>To restart the verification process, please initiate it again via Discord.</p>
+      `);
+    }
+    const discordId = entry.discordId;
 
     const tokenResponse = await axios.post(
       "https://github.com/login/oauth/access_token",

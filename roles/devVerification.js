@@ -44,11 +44,17 @@ async function postSaveStateWithRetry(state, discordId) {
   for (const base of candidates) {
     const url = `${base.replace(/\/+$/, "")}/save-state`;
     try {
+      const headers = { "Content-Type": "application/json", Accept: "application/json" };
+      // Authenticate to the internal /save-state endpoint when a shared secret is
+      // configured, so the state store cannot be poisoned by third parties.
+      if (process.env.INTERNAL_API_SECRET) {
+        headers["x-internal-secret"] = process.env.INTERNAL_API_SECRET;
+      }
       const res = await axios.post(
         url,
         { state, discordId },
         {
-          headers: { "Content-Type": "application/json", Accept: "application/json" },
+          headers,
           timeout: 4000,
           validateStatus: (s) => s >= 200 && s < 500,
         }
