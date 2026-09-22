@@ -16,7 +16,6 @@ const { Pool } = require("pg");
 const { MSGS } = require("../utils/messages");
 
 const INTERNAL_HTTP_BASE = process.env.INTERNAL_HTTP_BASE;
-const SERVER_URL = process.env.SERVER_URL;
 const CLIENT_ID = process.env.CLIENT_ID;
 const REDIRECT_URI = process.env.REDIRECT_URI;
 const GUILD_ID = process.env.DISCORD_GUILD_ID;
@@ -32,23 +31,26 @@ const pool = new Pool({
 });
 
 async function postSaveStateWithRetry(state, discordId) {
+  // Only target the explicitly configured internal endpoint and local loopbacks.
+  // Never dispatch x-internal-secret to SERVER_URL to prevent leaking secrets to public gateways.
   const candidates = [];
-
   if (INTERNAL_HTTP_BASE) candidates.push(INTERNAL_HTTP_BASE);
   candidates.push("http://127.0.0.1:3000", "http://localhost:3000");
-  if (SERVER_URL && /^https?:\/\//i.test(SERVER_URL)) {
-    candidates.push(SERVER_URL);
-  }
 
   let lastErr;
   for (const base of candidates) {
     const url = `${base.replace(/\/+$/, "")}/save-state`;
     try {
+      const headers = {
+        "Content-Type": "application/json",
+        Accept: "application/json",
+        "x-internal-secret": process.env.INTERNAL_API_SECRET,
+      };
       const res = await axios.post(
         url,
         { state, discordId },
         {
-          headers: { "Content-Type": "application/json", Accept: "application/json" },
+          headers,
           timeout: 4000,
           validateStatus: (s) => s >= 200 && s < 500,
         }
@@ -61,7 +63,7 @@ async function postSaveStateWithRetry(state, discordId) {
       lastErr = e;
     }
   }
-  throw lastErr || new Error("save-state failed (no endpoints reachable)");
+  throw lastErr || new Error("save-state failed (no internal endpoints reachable)");
 }
 
 module.exports = async function handleDevVerification(interaction, discordId, client) {
@@ -108,14 +110,12 @@ Please make sure you use your own GitHub account.
 
 module.exports.processGithubCallback = async function ({ accessToken, discordId, discordClient }) {
   try {
-    // Fetch GitHub user profile
     const userResponse = await axios.get("https://api.github.com/user", {
       headers: { Authorization: `Bearer ${accessToken}` },
     });
 
     const githubProfileUrl = userResponse.data.html_url;
 
-    // Check for duplicate usage of GitHub profile
     const isDuplicate = await module.exports.checkDuplicateGithubProfile(githubProfileUrl);
     if (isDuplicate) {
       return {
@@ -126,34 +126,35 @@ module.exports.processGithubCallback = async function ({ accessToken, discordId,
       };
     }
 
-    // Assign the Developer role
     try {
-      const guild = await discordClient.guilds.fetch(GUILD_ID);
-      const member = await guild.members.fetch(discordId);
-      const role = guild.roles.cache.get(DEV_ROLE_ID);
+      if (discordClient) {
+        const guild = await discordClient.guilds.fetch(GUILD_ID);
+        const member = await guild.members.fetch(discordId);
+        const role = guild.roles.cache.get(DEV_ROLE_ID);
 
-      if (role && member) {
-        await member.roles.add(role);
-        console.log(
-          `[${new Date().toISOString()}][VERIFICATION] ✅ Role '${DEV_ROLE_ID}' successfully assigned to user ${discordId}`
-        );
+        if (role && member) {
+          await member.roles.add(role);
+          console.log(
+            `[${new Date().toISOString()}][VERIFICATION] ✅ Role '${DEV_ROLE_ID}' successfully assigned to user ${discordId}`
+          );
 
-        try {
-          const modChannel = await discordClient.channels.fetch(MOD_LOGS_CHANNEL_ID);
-          if (modChannel?.isTextBased?.()) {
-            if (typeof MSGS?.modLogsDeveloperAssigned === "function") {
-              await modChannel.send(MSGS.modLogsDeveloperAssigned(DEV_ROLE_ID, discordId));
-            } else {
-              await modChannel.send(
-                `🛠️ Developer role <@&${DEV_ROLE_ID}> assigned to <@${discordId}>.`
-              );
+          try {
+            const modChannel = await discordClient.channels.fetch(MOD_LOGS_CHANNEL_ID);
+            if (modChannel?.isTextBased?.()) {
+              if (typeof MSGS?.modLogsDeveloperAssigned === "function") {
+                await modChannel.send(MSGS.modLogsDeveloperAssigned(DEV_ROLE_ID, discordId));
+              } else {
+                await modChannel.send(
+                  `🛠️ Developer role <@&${DEV_ROLE_ID}> assigned to <@${discordId}>.`
+                );
+              }
             }
+          } catch (e) {
+            console.warn("[dev] could not send mod log:", e?.message || e);
           }
-        } catch (e) {
-          console.warn("[dev] could not send mod log:", e?.message || e);
+        } else {
+          console.log("⚠️ Role or user not found.");
         }
-      } else {
-        console.log("⚠️ Role or user not found.");
       }
     } catch (err) {
       console.error("Error assigning role:", err);
@@ -163,7 +164,6 @@ module.exports.processGithubCallback = async function ({ accessToken, discordId,
       };
     }
 
-    // Save verification data
     await module.exports.saveDeveloperVerification(discordId, githubProfileUrl);
 
     return { success: true };
