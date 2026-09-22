@@ -59,10 +59,12 @@ setInterval(() => pruneExpiredStates(), STATE_TTL_MS).unref?.();
 
 // Only initialize the Discord client when a token is provided (avoids crashing in headless unit tests).
 let discordClient = null;
-if (DISCORD_BOT_TOKEN) {
+
+if (require.main === module && DISCORD_BOT_TOKEN) {
   discordClient = new Client({
     intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMembers],
   });
+
   discordClient
     .login(DISCORD_BOT_TOKEN)
     .then(() => console.log("✅ server.js Discord client logged in"))
