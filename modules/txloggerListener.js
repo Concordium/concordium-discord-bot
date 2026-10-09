@@ -955,7 +955,10 @@ async function handleSpecialAlerts(tag, payload, { blockHash, timestampIso }) {
             timestampIso,
           });
         } catch (e1) {
-          if (DEBUG) console.warn("[alerts] handleValidatorPaydayAccountReward failed:", e1?.message || e1);
+          console.error(
+            "[payday] validator notification handler failed:",
+            e1?.stack || e1?.message || e1
+          );
         }
 
         try {
@@ -968,11 +971,17 @@ async function handleSpecialAlerts(tag, payload, { blockHash, timestampIso }) {
             timestampIso,
           });
         } catch (e2) {
-          if (DEBUG) console.warn("[alerts] handleDelegatorPaydayAccountReward failed:", e2?.message || e2);
+          console.error(
+            "[payday] delegator notification handler failed:",
+            e2?.stack || e2?.message || e2
+          );
         }
       }
     } catch (e) {
-      if (DEBUG) console.warn("[alerts] paydayAccountReward fan-out failed:", e?.message || e);
+      console.error(
+        "[payday] reward event processing failed:",
+        e?.stack || e?.message || e
+      );
     }
   }
 }
@@ -1112,38 +1121,101 @@ async function processBlock(grpcClient, blockHash, height) {
     console.warn("[grpc] getBlockTransactionEvents failed:", e?.message || e);
   }
 
+  let paydayRewardCount = 0;
+  let specialEventsComplete = false;
+  const specialEventsStartedAt = Date.now();
+
   try {
     for await (const se of grpcClient.getBlockSpecialEvents(blockHash)) {
       const tag = se?.tag || se?.type || se?._tag;
 
+      if (normTagName(tag) === "paydayaccountreward") {
+        paydayRewardCount++;
+      }
+
       if (tag) {
+        const isPaydayReward = normTagName(tag) === "paydayaccountreward";
+        const alertStartedAt = Date.now();
+
         try {
-          await handleSpecialAlerts(tag, se, { blockHash: hash, timestampIso: blockTimeIso });
+          await handleSpecialAlerts(tag, se, {
+            blockHash: hash,
+            timestampIso: blockTimeIso,
+          });
         } catch (e) {
-          if (DEBUG) console.warn("[alerts] handleSpecialAlerts failed:", e?.message || e);
+          if (isPaydayReward) {
+            console.error(
+              "[payday] handleSpecialAlerts failed:",
+              e?.stack || e?.message || e
+            );
+          } else if (DEBUG) {
+            console.warn(
+              "[alerts] handleSpecialAlerts failed:",
+              e?.message || e
+            );
+          }
+        } finally {
+          if (isPaydayReward) {
+            const durationMs = Date.now() - alertStartedAt;
+
+            if (durationMs > 5000) {
+              console.warn(
+                `[payday] slow reward processing: ` +
+                `block=${hash} duration_ms=${durationMs}`
+              );
+            }
+          }
         }
       }
 
       if (LOG_SPECIAL) {
-        if (SPECIAL_TAGS_SET && tag && !SPECIAL_TAGS_SET.has(tag)) continue;
+        if (SPECIAL_TAGS_SET && tag && !SPECIAL_TAGS_SET.has(tag)) {
+          continue;
+        }
 
         const details = [];
+
         for (const [k, v] of Object.entries(se || {})) {
           if (k === "tag" || k === "type" || k === "_tag") continue;
           if (v == null) continue;
-          details.push(`${k}=${typeof v === "object" ? safeJson(v) : v}`);
+
+          details.push(
+            `${k}=${typeof v === "object" ? safeJson(v) : v}`
+          );
         }
+
         console.log(
-          `⋯ [grpc] special ${tag}${details.length ? " " + details.join(" ") : ""} in block ${hash}`
+          `⋯ [grpc] special ${tag}` +
+          `${details.length ? " " + details.join(" ") : ""}` +
+          ` in block ${hash}`
         );
       }
     }
+
+    // All special events were read without a gRPC iteration error.
+    specialEventsComplete = true;
+
   } catch (e) {
-    console.warn("[grpc] getBlockSpecialEvents failed:", e?.message || e);
+    console.warn(
+      "[grpc] getBlockSpecialEvents failed:",
+      e?.message || e
+    );
+  }
+
+  // Log PayDay processing statistics regardless of TXL_DEBUG.
+  if (paydayRewardCount > 0) {
+    console.log(
+      `[payday] block=${hash} height=${height} ` +
+      `reward_events=${paydayRewardCount} ` +
+      `complete=${specialEventsComplete} ` +
+      `duration_ms=${Date.now() - specialEventsStartedAt}`
+    );
   }
 }
 
 let lastHeight = null;
+let lastHeartbeatAt = 0;
+const HEARTBEAT_INTERVAL_MS = 5 * 60 * 1000;
 
 async function startTxLoggerListener() {
   if (!ConcordiumGRPCNodeClient) {
@@ -1198,11 +1270,25 @@ async function startTxLoggerListener() {
 
         await processBlock(grpcClient, hash, h);
         lastHeight = h;
+        const now = Date.now();
+
+        if (now - lastHeartbeatAt >= HEARTBEAT_INTERVAL_MS) {
+          console.log(
+            `[grpc] listener heartbeat: height=${lastHeight} ` +
+            `timestamp=${new Date(now).toISOString()}`
+          );
+
+          lastHeartbeatAt = now;
+        }
       }
 
       await new Promise((r) => setTimeout(r, 1000));
     } catch (err) {
-      logger.debug("[grpc]", `listener error: ${err?.message || err}. Reconnecting in 1000ms...`);
+      console.warn(
+        "[grpc] listener error, reconnecting in 1000ms:",
+        err?.stack || err?.message || err
+      );
+
       await new Promise((r) => setTimeout(r, 1000));
     }
   }
