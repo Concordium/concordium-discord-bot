@@ -1184,7 +1184,9 @@ async function startTxLoggerListener() {
           console.warn(`⚠️ [grpc] height gap: had ${lastHeight}, got ${h}. Backfilling ${missingFrom}..${missingTo}`);
           for (let hh = missingFrom; hh <= missingTo; hh++) {
             try {
-              for await (const bh of grpcClient.getBlocksAtHeight(BigInt(hh))) {
+              const blockHashes = await grpcClient.getBlocksAtHeight(BigInt(hh));
+
+              for (const bh of blockHashes) {
                 await processBlock(grpcClient, bh, hh);
                 break;
               }
