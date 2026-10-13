@@ -16,6 +16,7 @@
  * - Configurable logging/filtering via TXL_* env flags; TLS via GRPC_TLS; CLI path via CONCORDIUM_CLIENT_PATH.
  */
 const { execFile } = require("child_process");
+const { processFinalizedBlock } = require("./grpcGapRecovery");
 let ConcordiumGRPCNodeClient, credentials;
 const vdel = require("./validatorDelegators");
 
@@ -1241,35 +1242,22 @@ async function startTxLoggerListener() {
           : grpcClient.getFinalizedBlocksFrom(BigInt(lastHeight + 1));
 
       for await (const b of stream) {
-        const h =
-          typeof b.height === "bigint"
-            ? Number(b.height)
-            : typeof b.blockHeight === "bigint"
-            ? Number(b.blockHeight)
-            : Number(b.height ?? b.blockHeight ?? 0);
-
-        const hash = b.hash ?? b.blockHash;
-
-        if (lastHeight != null && h > lastHeight + 1) {
-          const missingFrom = lastHeight + 1;
-          const missingTo = h - 1;
-          console.warn(`⚠️ [grpc] height gap: had ${lastHeight}, got ${h}. Backfilling ${missingFrom}..${missingTo}`);
-          for (let hh = missingFrom; hh <= missingTo; hh++) {
-            try {
-              const blockHashes = await grpcClient.getBlocksAtHeight(BigInt(hh));
-
-              for (const bh of blockHashes) {
-                await processBlock(grpcClient, bh, hh);
-                break;
-              }
-            } catch (e) {
-              console.warn(`[grpc] backfill failed at height ${hh}:`, e?.message || e);
-            }
+        try {
+          lastHeight = await processFinalizedBlock({
+            grpcClient,
+            block: b,
+            lastHeight,
+            processBlock,
+            debug: DEBUG,
+          });
+        } catch (e) {
+          if (e.lastSuccessfulHeight !== undefined) {
+            lastHeight = e.lastSuccessfulHeight;
           }
+
+          throw e;
         }
 
-        await processBlock(grpcClient, hash, h);
-        lastHeight = h;
         const now = Date.now();
 
         if (now - lastHeartbeatAt >= HEARTBEAT_INTERVAL_MS) {
