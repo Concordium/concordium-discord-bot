@@ -606,6 +606,9 @@ async function handleValidatorPaydayAccountReward({
 
   const recipients = [...new Set(res.rows.map(r => r.discord_id))];
 
+  let sent = 0;
+  let notSent = 0;
+
   for (const uid of recipients) {
     const mention = `<@${uid}>`;
     const payload = MSGS.validatorPaydayReward(
@@ -615,8 +618,20 @@ async function handleValidatorPaydayAccountReward({
       feesStr,
       blockHash
     );
-    await safeDM(uid, payload);
+
+    const ok = await safeDM(uid, payload);
+
+    if (ok) {
+      sent++;
+    } else {
+      notSent++;
+    }
   }
+
+  console.log(
+    `[payday] validator recipients=${recipients.length} ` +
+    `dm_sent=${sent} dm_not_sent=${notSent} block=${blockHash}`
+  );
 }
 
 async function getDelegatorDiscordIdsByValidator(validatorId) {
@@ -661,7 +676,8 @@ async function handleDelegatorPaydayAccountReward({
   }
 
   const totalStr = fmtCCD(totalCCD);
-
+  let sent = 0;
+  let notSent = 0;
   for (const r of rows.rows) {
     const mention = `<@${r.discord_id}>`;
 
@@ -674,11 +690,21 @@ async function handleDelegatorPaydayAccountReward({
       if (Number.isFinite(n)) targetNorm = String(n);
     }
 
-    await safeDM(
+    const ok = await safeDM(
       r.discord_id,
       MSGS.delegatorPaydayReward(mention, totalStr, blockHash, targetNorm)
     );
+
+    if (ok) {
+      sent++;
+    } else {
+      notSent++;
+    }
   }
+  console.log(
+    `[payday] delegator recipients=${rows.rows.length} ` +
+    `dm_sent=${sent} dm_not_sent=${notSent} block=${blockHash}`
+  );
 }
 
 async function notifyStatus(validatorId, status = {}) {
