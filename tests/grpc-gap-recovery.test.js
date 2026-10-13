@@ -216,3 +216,18 @@ test("preserves height when processBlock fails", async () => {
 
   assert.deepEqual(processed, [101]);
 });
+
+test("rejects finalized blocks without a hash", async () => {
+  const mock = createMock();
+
+  await assert.rejects(
+    processFinalizedBlock({
+      ...mock,
+      block: { height: 101 },
+      lastHeight: 100,
+    }),
+    /Invalid finalized block hash at height 101/
+  );
+
+  assert.equal(mock.processed.length, 0);
+});

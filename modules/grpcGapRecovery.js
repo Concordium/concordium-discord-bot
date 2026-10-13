@@ -21,6 +21,15 @@ async function processFinalizedBlock({
     throw new Error(`Invalid finalized block height: ${h}`);
   }
 
+  if (
+    hash == null ||
+    (typeof hash === "string" && hash.trim().length === 0) ||
+    ((Buffer.isBuffer(hash) || hash instanceof Uint8Array) &&
+      hash.length === 0)
+  ) {
+    throw new Error(`Invalid finalized block hash at height ${h}`);
+  }
+
   if (lastHeight != null && h <= lastHeight) {
     if (debug) {
       console.log(
